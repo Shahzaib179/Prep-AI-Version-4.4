@@ -64,7 +64,7 @@ from db import (
 from documents import chunk_pages, download_drive, extract_document
 import auth
 from auth import AuthError
-from db_core import describe_backend
+from db_core import DatabaseUnavailable, describe_backend
 from groq_service import grounded_answer
 from memory import LongTermMemory, memory_prompt, reset_memory
 from quiz_runtime import clock, elapsed_seconds, is_expired, iso_to_epoch, minutes_to_seconds, remaining_seconds, suggested_minutes
@@ -91,7 +91,12 @@ def _init_database() -> bool:
     return True
 
 
-_init_database()
+try:
+    _init_database()
+except Exception as _db_exc:  # show a readable reason instead of Streamlit's redacted traceback
+    st.error("🛑 Prep AI cannot reach its database.")
+    st.warning(str(_db_exc) if isinstance(_db_exc, DatabaseUnavailable) else "Database start-up failed. Open Manage app -> Logs for the detailed error.")
+    st.stop()
 
 # -----------------------------------------------------------------------------
 # Session state

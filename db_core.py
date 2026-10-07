@@ -234,6 +234,41 @@ _pool_url = ""
 _pool_lock = threading.Lock()
 
 
+class DatabaseUnavailable(RuntimeError):
+    """The configured Postgres database cannot be reached. The message is safe to show (no password, no host)."""
+
+
+def diagnose_connection_error(exc: BaseException) -> str:
+    """Turn a raw libpq / pool error into a plain-language hint for the app owner."""
+    t = str(exc).lower()
+    if "password authentication failed" in t or "authentication failed" in t:
+        return "The database rejected the username or password. Re-copy DATABASE_URL from your provider; if the password contains characters such as @ : / # ? %, URL-encode them (for example @ becomes %40)."
+    if "tenant or user not found" in t or "circuit breaker" in t:
+        return "The pooler does not recognise the user. With Supabase's pooler the user must be postgres.PROJECT_REF (not just postgres). Copy the full string from Project Settings -> Database -> Connection string."
+    if "network is unreachable" in t or "cannot assign requested address" in t or "no route to host" in t:
+        return "The database host is not reachable over IPv4. Streamlit Cloud has no IPv6, so use the Supabase *pooler* connection string (host ends in pooler.supabase.com), not the 'direct connection' string (db.PROJECT_REF.supabase.co)."
+    if "could not translate host name" in t or "name or service not known" in t or "nodename nor servname" in t:
+        return "The database host name in DATABASE_URL could not be found. Check it for typos."
+    if "timeout" in t or "timed out" in t:
+        return "The connection timed out. Check that the project is not paused (Supabase pauses free projects after inactivity) and that DATABASE_URL uses the pooler host and the right port (6543 or 5432)."
+    if "ssl" in t:
+        return "SSL negotiation failed. Add ?sslmode=require to the end of DATABASE_URL."
+    if "does not exist" in t and "database" in t:
+        return "The database name in DATABASE_URL does not exist (Supabase uses 'postgres')."
+    return "The database could not be reached. Check DATABASE_URL, that the project is running, and the Streamlit logs for the detailed error."
+
+
+def _preflight(url: str) -> None:
+    """One direct connection attempt so a bad URL fails in seconds with the REAL reason (a pool hides it behind a timeout)."""
+    import logging
+    try:
+        with psycopg.connect(url, connect_timeout=10, prepare_threshold=None) as c:  # type: ignore[union-attr]
+            c.execute("SELECT 1")
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("prepai.db").error("Postgres connection failed: %s", exc)    # full detail goes to the server log only
+        raise DatabaseUnavailable(diagnose_connection_error(exc)) from None
+
+
 def _get_pool(url: str):
     """One small pool per process (Streamlit reruns must not open a new connection each time)."""
     global _pool, _pool_url
@@ -242,6 +277,7 @@ def _get_pool(url: str):
             return _pool
         if psycopg is None:
             raise RuntimeError("DATABASE_URL points to Postgres but 'psycopg' is not installed. Run: pip install \"psycopg[binary]\" psycopg-pool")
+        _preflight(url)
         kwargs = {"row_factory": _pg_row_factory, "prepare_threshold": None, "autocommit": False}  # None = safe with Supabase/Neon poolers
         try:
             from psycopg_pool import ConnectionPool
@@ -281,7 +317,10 @@ def db_identity() -> str:
 def connect() -> Connection:
     if is_postgres():
         pool = _get_pool(database_url())
-        raw = pool.getconn()
+        try:
+            raw = pool.getconn()
+        except Exception as exc:  # noqa: BLE001 - PoolTimeout etc.
+            raise DatabaseUnavailable(diagnose_connection_error(exc)) from None
         return Connection(raw, "postgres", release=pool.putconn)
     raw = sqlite3.connect(_sqlite_path(), check_same_thread=False)
     raw.row_factory = sqlite3.Row

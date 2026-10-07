@@ -46,3 +46,10 @@
 * Passwords use scrypt (Python standard library) instead of argon2id: strong, memory-hard, and nothing extra to install.
 * An old Student ID can be claimed by whoever registers first with it (v4.3 had no passwords to prove ownership).
 * Free tiers can pause or change limits; check your provider's current terms.
+
+## Troubleshooting: "Prep AI cannot reach its database" / PoolTimeout
+The app now prints the reason. The usual causes on Streamlit Cloud:
+1. **Direct connection string used.** Supabase's `db.PROJECT_REF.supabase.co` host is IPv6-only and Streamlit Cloud has no IPv6. Use the **Transaction pooler** string (host `...pooler.supabase.com`).
+2. **Wrong user.** On the pooler the user is `postgres.PROJECT_REF`, not `postgres`.
+3. **Special characters in the password** (`@ : / # ? %`) must be URL-encoded (`@` -> `%40`).
+4. **Paused project** (free Supabase projects pause after inactivity) - restore it in the dashboard.
