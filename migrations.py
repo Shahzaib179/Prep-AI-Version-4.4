@@ -145,10 +145,54 @@ def _m003_accounts(con: Connection) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS ix_quizzes_owner ON shared_quizzes(created_by)")
 
 
+def _m004_progress(con: Connection) -> None:
+    con.execute("CREATE TABLE IF NOT EXISTS daily_activity (student_id TEXT NOT NULL, day TEXT NOT NULL, questions INTEGER DEFAULT 0, correct INTEGER DEFAULT 0, quizzes INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, PRIMARY KEY(student_id, day))")
+    con.execute("CREATE TABLE IF NOT EXISTS seen_questions (student_id TEXT NOT NULL, qhash TEXT NOT NULL, subject TEXT, topic TEXT, question_text TEXT, seen_at TEXT, PRIMARY KEY(student_id, qhash))")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_seen_topic ON seen_questions(student_id, subject, topic)")
+    con.add_column("student_preferences", "daily_goal", "INTEGER DEFAULT 20")
+    con.add_column("mistakes", "options_json", "TEXT")          # lets a past mistake be re-asked as a real MCQ
+    con.add_column("mistakes", "difficulty", "TEXT")
+
+
+def _m005_bank(con: Connection) -> None:
+    t = _types(con)
+    con.execute(f"""CREATE TABLE IF NOT EXISTS bank_questions (
+        id {t['PK']}, owner_id TEXT NOT NULL, subject TEXT DEFAULT '', topic TEXT DEFAULT '', difficulty TEXT DEFAULT 'Medium',
+        question_text TEXT NOT NULL, options_json TEXT NOT NULL, answer TEXT NOT NULL, explanation TEXT DEFAULT '', concept TEXT DEFAULT '',
+        source TEXT DEFAULT 'manual', qhash TEXT NOT NULL, is_shared INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, times_used INTEGER DEFAULT 0,
+        UNIQUE(owner_id, qhash))""")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_bank_owner ON bank_questions(owner_id, subject, topic)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_bank_shared ON bank_questions(is_shared, subject)")
+    con.add_column("shared_quizzes", "shuffle_options", "INTEGER DEFAULT 1")
+
+
+def _m006_classes(con: Connection) -> None:
+    t = _types(con)
+    con.execute(f"CREATE TABLE IF NOT EXISTS classes (id {t['PK']}, tutor_id TEXT NOT NULL, name TEXT NOT NULL, join_code TEXT NOT NULL UNIQUE, created_at TEXT, is_active INTEGER DEFAULT 1)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_classes_tutor ON classes(tutor_id)")
+    con.execute("CREATE TABLE IF NOT EXISTS class_members (class_id INTEGER NOT NULL, student_id TEXT NOT NULL, joined_at TEXT, PRIMARY KEY(class_id, student_id))")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_members_student ON class_members(student_id)")
+    con.execute(f"CREATE TABLE IF NOT EXISTS assignments (id {t['PK']}, class_id INTEGER NOT NULL, tutor_id TEXT NOT NULL, quiz_code TEXT NOT NULL, title TEXT, due_at TEXT, allow_late INTEGER DEFAULT 0, created_at TEXT, UNIQUE(class_id, quiz_code))")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_assign_quiz ON assignments(quiz_code)")
+
+
+def _m007_mock(con: Connection) -> None:
+    t = _types(con)
+    con.execute(f"""CREATE TABLE IF NOT EXISTS mock_results (
+        id {t['PK']}, student_id TEXT NOT NULL, quiz_id INTEGER, blueprint TEXT, total INTEGER, correct INTEGER, wrong INTEGER, skipped INTEGER,
+        marks {t['REAL']}, max_marks {t['REAL']}, negative INTEGER DEFAULT 0, taken_sec INTEGER, sections_json TEXT, created_at TEXT)""")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_mock_student ON mock_results(student_id, id)")
+    con.execute("CREATE TABLE IF NOT EXISTS mock_progress (student_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT)")
+
+
 MIGRATIONS: list[tuple[int, str, Callable[[Connection], None]]] = [
     (1, "baseline schema", _m001_baseline),
     (2, "app_meta + memory_vectors", _m002_meta_and_vectors),
     (3, "accounts + sessions", _m003_accounts),
+    (4, "progress, seen questions, mistake options", _m004_progress),
+    (5, "question bank + option shuffle flag", _m005_bank),
+    (6, "classes + assignments", _m006_classes),
+    (7, "mock tests", _m007_mock),
 ]
 
 

@@ -13,6 +13,7 @@ from mastery_model import (
     mastery_label,
     norm,
 )
+import progress
 from migrations import migrate
 
 MASTERY_MODEL_VERSION = 2  # bump to force every student's mastery to be recomputed
@@ -107,13 +108,16 @@ def record_quiz(student_id: str, subject: str, topic: str, questions: list[dict[
                 skipped += 1
             else:
                 incorrect += int(not is_correct)
-            con.execute("INSERT INTO question_attempts(quiz_id,student_id,question_text,selected_answer,correct_answer,is_correct,subject,topic,concept,difficulty,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (quiz_id, student_id, q.get("question", ""), selected, correct_answer, int(is_correct), subject, topic, q.get("concept", ""), q.get("difficulty", difficulty), now))
+            q_subject, q_topic = (q.get("subject") or subject), (q.get("topic") or topic)      # mixed-subject quizzes (mock tests) credit each question to its own subject
+            con.execute("INSERT INTO question_attempts(quiz_id,student_id,question_text,selected_answer,correct_answer,is_correct,subject,topic,concept,difficulty,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (quiz_id, student_id, q.get("question", ""), selected, correct_answer, int(is_correct), q_subject, q_topic, q.get("concept", ""), q.get("difficulty", difficulty), now))
             if not is_correct and selected:
-                con.execute("INSERT INTO mistakes(student_id,subject,topic,concept,question_text,wrong_answer,correct_answer,explanation,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (student_id, subject, topic, q.get("concept", ""), q.get("question", ""), selected, correct_answer, q.get("explanation", ""), now))
+                con.execute("INSERT INTO mistakes(student_id,subject,topic,concept,question_text,wrong_answer,correct_answer,explanation,created_at,options_json,difficulty) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (student_id, q_subject, q_topic, q.get("concept", ""), q.get("question", ""), selected, correct_answer, q.get("explanation", ""), now, json.dumps(q.get("options") or {}), q.get("difficulty", difficulty)))
         total = len(questions)
         score = (correct / total * 100) if total else 0
         con.execute("UPDATE quiz_attempts SET correct=?,incorrect=?,skipped=?,score=? WHERE id=?", (correct, incorrect, skipped, score, quiz_id))
+        progress.mark_seen(con, student_id, questions, subject, topic)
     update_mastery_from_quiz(student_id, subject, topic, questions, answers)
+    progress.record_activity(student_id, answered=correct + incorrect, correct=correct, perfect=bool(total and correct == total))
     return int(quiz_id)
 
 
@@ -429,7 +433,7 @@ def normalize_code(code: str) -> str:
 
 
 def create_shared_quiz(created_by: str, title: str, subject: str, topic: str, difficulty: str,
-                       questions: list[dict[str, Any]], time_limit_sec: int = 0, code_length: int = 6) -> str:
+                       questions: list[dict[str, Any]], time_limit_sec: int = 0, code_length: int = 6, shuffle_options: bool = True) -> str:
     import secrets
     now = datetime.utcnow().isoformat()
     for _ in range(20):
@@ -437,8 +441,8 @@ def create_shared_quiz(created_by: str, title: str, subject: str, topic: str, di
         try:
             with connect() as con:
                 con.execute(
-                    "INSERT INTO shared_quizzes(code,title,subject,topic,difficulty,questions_json,time_limit_sec,created_by,created_at,is_open) VALUES(?,?,?,?,?,?,?,?,?,1)",
-                    (code, title, subject, topic, difficulty, json.dumps(questions), int(time_limit_sec or 0), created_by, now),
+                    "INSERT INTO shared_quizzes(code,title,subject,topic,difficulty,questions_json,time_limit_sec,created_by,created_at,is_open,shuffle_options) VALUES(?,?,?,?,?,?,?,?,?,1,?)",
+                    (code, title, subject, topic, difficulty, json.dumps(questions), int(time_limit_sec or 0), created_by, now, int(bool(shuffle_options))),
                 )
             return code
         except IntegrityError:
@@ -533,14 +537,15 @@ def shared_quiz_results(code: str) -> list[dict[str, Any]]:
 def roster(tutor_id: str | None = None) -> list[dict[str, Any]]:
     """One summary row per student (tutors are excluded).
 
-    With ``tutor_id`` only the students who took at least one quiz published by that tutor are listed,
+    With ``tutor_id`` only the students who took a quiz published by that tutor, or who belong to one of that tutor's classes, are listed,
     so one tutor never sees another tutor's class.
     """
     sql = "SELECT id,name,level,created_at,last_active FROM students WHERE COALESCE(role,'student')='student'"
     params: tuple = ()
     if tutor_id is not None:
-        sql += (" AND id IN (SELECT a.student_id FROM quiz_attempts a JOIN shared_quizzes q ON q.code=a.shared_code WHERE q.created_by=?)")
-        params = (tutor_id,)
+        sql += (" AND (id IN (SELECT a.student_id FROM quiz_attempts a JOIN shared_quizzes q ON q.code=a.shared_code WHERE q.created_by=?)"
+                " OR id IN (SELECT m.student_id FROM class_members m JOIN classes c ON c.id=m.class_id WHERE c.tutor_id=?))")
+        params = (tutor_id, tutor_id)
     with connect() as con:
         studs = [dict(r) for r in con.execute(sql + " ORDER BY LOWER(name)", params).fetchall()]
         quiz = {r["student_id"]: dict(r) for r in con.execute(

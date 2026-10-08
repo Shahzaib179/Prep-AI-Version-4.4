@@ -66,6 +66,13 @@ import auth
 from auth import AuthError
 from db_core import DatabaseUnavailable, describe_backend
 from groq_service import grounded_answer
+import progress
+from today_pages import progress_strip, render_today
+import classes
+import question_tools
+from class_pages import render_my_classes, render_tutor_classes
+from mock_pages import render_mock
+from bank_pages import render_add_from_bank, render_bank_manager, render_question_editor, render_save_to_bank
 from memory import LongTermMemory, memory_prompt, reset_memory
 from quiz_runtime import clock, elapsed_seconds, is_expired, iso_to_epoch, minutes_to_seconds, remaining_seconds, suggested_minutes
 from theme import resolve_theme, validate_theme
@@ -332,11 +339,17 @@ with st.sidebar:
     else:
         st.markdown(f"**Student:** {st.session_state.student_name}")
         st.caption(f"Student ID: `{student_id}`")
+        _p = progress.get_progress(student_id)
+        st.caption(f"🔥 {_p['streak']}-day streak · ⭐ Level {_p['level']} · 🎯 {_p['today_questions']}/{_p['goal']} today")
+        _pend = classes.pending_count(student_id)
         nav_pages = [
             "Dashboard",
+            "Today",
             "Learn",
             "Practice",
             "Exam",
+            "Mock Test",
+            f"My Classes ({_pend})" if _pend else "My Classes",
             "Published Quizzes",
             "AI Tutor",
             "Voice Tutor",
@@ -522,6 +535,7 @@ def submit_quiz(state_key: str, timed_out: bool) -> None:
     # Answers picked after the deadline (+2s network grace) do not count.
     answers = {i: a for i, a in quiz["answers"].items() if deadline is None or quiz["answer_ts"].get(i, 0) <= deadline + 2}
     taken = elapsed_seconds(started, limit)
+    before = progress.get_progress(student_id)
     try:
         quiz_id = record_quiz(
             student_id, quiz["subject"], quiz["topic"], questions, answers, quiz["difficulty"],
@@ -547,6 +561,12 @@ def submit_quiz(state_key: str, timed_out: bool) -> None:
     }
     if n and correct == n and not quiz.get("shared_code"):
         add_achievement(student_id, "perfect_quiz", "Perfect Quiz")
+    after = progress.get_progress(student_id)
+    quiz["result"]["xp"] = progress.xp_for(correct + wrong, correct, True, bool(n and correct == n))
+    quiz["result"]["milestones"] = [t for _, t in progress.new_milestones(student_id, before, after)]
+    for code, title in progress.new_milestones(student_id, before, after):
+        add_achievement(student_id, code, title)
+    quiz["result"]["streak"] = after["streak"]
 
 
 def render_quiz_result(quiz: dict) -> None:
@@ -571,6 +591,8 @@ def render_quiz_result(quiz: dict) -> None:
             st.metric("Marks (with −0.25 negative marking)", f"{r['final']:.2f} / {r['total']}")
         else:
             st.metric("Correct", f"{r['correct']} of {r['total']}")
+    if r.get("xp"):
+        st.success(f"⭐ +{r['xp']} XP · 🔥 {r.get('streak', 0)}-day streak" + ("".join(f"  \n🏅 **{m}**" for m in r.get("milestones", []))))
     if quiz.get("shared_code"):
         results = shared_quiz_results(quiz["shared_code"])
         mine = next((i for i, x in enumerate(results) if x["student_id"] == student_id), None)
@@ -662,10 +684,12 @@ def _share_form(quiz: dict) -> None:
     st.caption("Anyone with the code can take this exact quiz. Each person gets one attempt, and only the tutor can see the results.")
     title = st.text_input("Quiz title", value=f"{quiz['subject']} – {quiz['topic']}", key=f"share_title_{quiz['uid']}")
     mins = st.number_input("Time limit for everyone (minutes, 0 = none)", 0, QUIZ_MAX_MINUTES, int(quiz["time_limit_sec"] // 60), key=f"share_min_{quiz['uid']}")
+    shuffle = st.checkbox("Shuffle the answer options (A-D) for each student", value=True, key=f"share_shuf_{quiz['uid']}",
+                          help="Neighbours cannot copy 'the answer is B'. Questions whose options say 'All of the above' or 'Both A and B' are never shuffled.")
     if st.button("Publish quiz", type="primary", key=f"share_btn_{quiz['uid']}"):
         quiz["share_code_created"] = create_shared_quiz(
             student_id, title.strip() or "Shared quiz", quiz["subject"], quiz["topic"], quiz["difficulty"],
-            quiz["questions"], minutes_to_seconds(mins), SHARED_CODE_LENGTH,
+            quiz["questions"], minutes_to_seconds(mins), SHARED_CODE_LENGTH, shuffle_options=shuffle,
         )
         st.rerun()
 
@@ -689,6 +713,11 @@ def render_publish_tab() -> None:
     if quiz.get("shared_code"):
         st.info("This quiz was joined from a code, so it cannot be published again.")
         return
+    if st.session_state.is_tutor and not quiz.get("share_code_created"):
+        with st.expander("✏️ Review and edit the questions before publishing"):
+            render_question_editor(quiz)
+        render_add_from_bank(quiz, student_id)
+        render_save_to_bank(quiz, student_id)
     _share_form(quiz)
 
 
@@ -708,22 +737,64 @@ def render_join_tab() -> None:
         go = st.form_submit_button("Open quiz", type="primary")
     if go:
         code = normalize_code(code_in)
-        found = get_shared_quiz(code) if code else None
-        if not found:
+        if not code:
             st.error("No quiz found with that code. Please check it and try again.")
             return
-        if not found["is_open"]:
-            st.warning("This quiz has been closed by its creator.")
-            return
-        if has_attempted_shared(code, student_id):
-            mine = next((x for x in shared_quiz_results(code) if x["student_id"] == student_id), None)
-            st.info("You have already completed this quiz." + (f" Your score: **{mine['score']:.0f}%**." if mine else ""))
-            return
-        # Each student gets the same questions in their own (stable) random order.
-        questions = list(found["questions"])
-        random.Random(f"{code}:{student_id}").shuffle(questions)
-        st.session_state.shared_quiz = new_quiz(questions, found["subject"], found["topic"], found["difficulty"], [], found["time_limit_sec"], shared_code=code, title=found["title"])
-        st.rerun()
+        if open_shared_quiz(code):
+            st.rerun()
+
+
+def open_shared_quiz(code: str) -> bool:
+    """Open a published quiz for the current student. Applies the class deadline. Returns True when the quiz is ready."""
+    found = get_shared_quiz(code)
+    if not found:
+        st.error("No quiz found with that code. Please check it and try again.")
+        return False
+    if not found["is_open"]:
+        st.warning("This quiz has been closed by its creator.")
+        return False
+    if has_attempted_shared(code, student_id):
+        mine = next((x for x in shared_quiz_results(code) if x["student_id"] == student_id), None)
+        st.info("You have already completed this quiz." + (f" Your score: **{mine['score']:.0f}%**." if mine else ""))
+        return False
+    dl = classes.deadline_state(student_id, code)
+    if dl and dl["blocked"]:
+        st.error(f"The deadline for this quiz passed on {classes.fmt_local(dl['due_at'])}. Ask your tutor if you need more time.")
+        return False
+    if dl and dl["late"]:
+        st.warning("The deadline has passed. This attempt will be marked as late.")
+    # Each student gets the same questions in their own (stable) random order.
+    questions = list(found["questions"])
+    random.Random(f"{code}:{student_id}").shuffle(questions)
+    if found.get("shuffle_options", 1):
+        questions = [question_tools.shuffle_options(q, f"{code}:{student_id}:{progress.qhash(q.get('question', ''))}") for q in questions]
+    st.session_state.shared_quiz = new_quiz(questions, found["subject"], found["topic"], found["difficulty"], [], found["time_limit_sec"], shared_code=code, title=found["title"])
+    return True
+
+
+def render_classes_page() -> None:
+    if st.session_state.get("shared_quiz"):
+        hero("🏫 My Classes", "Your assigned quiz is open below.")
+        render_join_tab()
+        return
+    render_my_classes(student_id, lambda code: open_shared_quiz(code) and st.rerun())
+
+
+def generate_mock_questions(subject: str, n: int) -> list[dict]:
+    """AI top-up for mock sections: batches of at most 20 questions grounded in the knowledge base."""
+    out: list[dict] = []
+    db_index, metadata = load_database_index()
+    while len(out) < n:
+        k = min(20, n - len(out))
+        context = ""
+        if db_index is not None:
+            context, _ = build_rag_context(f"{subject} MDCAT", metadata, db_index, 10)
+        ctx = create_context(f"Create {k} MDCAT {subject} MCQs", subject, subject, "Medium", context)
+        batch = orch.practice_request(ctx, k)
+        if not batch:
+            break
+        out += batch
+    return out[:n]
 
 
 def render_my_published_tab() -> None:
@@ -806,16 +877,20 @@ def render_tutor_create_quiz() -> None:
 
 def render_tutor_home() -> None:
     hero("👩‍🏫 Tutor Dashboard", "Create a quiz, publish it for your students, and check how every student performed.")
-    tabs = st.tabs(["Create Quiz", "Publish", "My Published Quizzes", "Quiz Results", "Student Performance"])
+    tabs = st.tabs(["Create Quiz", "Question Bank", "Classes", "Publish", "My Published Quizzes", "Quiz Results", "Student Performance"])
     with tabs[0]:
         render_tutor_create_quiz()
     with tabs[1]:
-        render_publish_tab()
+        render_bank_manager(student_id, new_quiz)
     with tabs[2]:
-        render_my_published_tab()
+        render_tutor_classes(student_id)
     with tabs[3]:
-        render_quiz_results()
+        render_publish_tab()
     with tabs[4]:
+        render_my_published_tab()
+    with tabs[5]:
+        render_quiz_results()
+    with tabs[6]:
         render_student_performance()
 
 
@@ -850,6 +925,7 @@ def render_dashboard() -> None:
         "Your adaptive learning dashboard is personalized to this Student ID.",
     )
     stats = dashboard_stats(student_id)
+    progress_strip(student_id)
     g1, g2, g3, g4 = st.columns(4)
     with g1:
         charts.show(charts.ring(stats["overall"], "Overall mastery"))
@@ -1870,10 +1946,13 @@ def render_settings() -> None:
 
 routes = {
     "Dashboard": render_dashboard,
+    "Today": lambda: render_today(student_id, st.session_state.student_name, new_quiz, render_quiz_taker),
     "Learn": render_learn,
     "Practice": render_practice,
     "Exam": render_exam,
     "Published Quizzes": render_published_quizzes,
+    "Mock Test": lambda: render_mock(student_id, new_quiz, submit_quiz, quiz_timer, generate_mock_questions),
+    "My Classes": render_classes_page,
     "Tutor Dashboard": lambda: render_tutor_home() if st.session_state.is_tutor else st.error("Tutor access is required."),
     "AI Tutor": render_tutor,
     "Voice Tutor": render_voice_tutor,
@@ -1886,4 +1965,4 @@ routes = {
     "Settings": render_settings,
 }
 
-routes[page]()
+routes[page.split(' (')[0]]()

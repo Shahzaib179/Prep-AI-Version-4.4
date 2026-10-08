@@ -303,3 +303,9 @@ python tests/test_features.py && python tests/test_db_contract.py && python test
   && python tests/test_ai_gateway.py && python tests/test_migration_script.py \
   && python tests/app_pages_smoke.py && python tests/ui_smoke.py && PYTHONPATH=. python tests/test_agents.py
 ```
+
+## v4.5
+Streaks, daily goal, XP/levels, Today page, mistake retake and no-repeat questions: see [docs/V4.5_PROGRESS.md](docs/V4.5_PROGRESS.md). Add `python tests/test_progress.py` to the test list above.
+
+## v4.6
+Question bank, question editing, option shuffling, tutor classes with deadlines and mock test mode: see [docs/V4.6_MONTH1.md](docs/V4.6_MONTH1.md).

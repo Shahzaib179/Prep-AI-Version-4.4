@@ -5,6 +5,7 @@ from typing import Any
 
 from adaptive import next_best_action
 from groq_service import generate_json, generate_text
+import progress
 from memory import LongTermMemory, memory_prompt
 from web_search import search_web
 import merit_service as ms
@@ -60,7 +61,10 @@ Start with a concise diagnostic question if the student asks to learn a concept.
 class AssessmentAgent:
     name = "Assessment Agent"
 
-    def generate_mcqs(self, ctx: AgentContext, memories: list[dict[str, Any]], count: int = 10) -> list[dict[str, Any]]:
+    def generate_mcqs(self, ctx: AgentContext, memories: list[dict[str, Any]], count: int = 10, avoid: list[str] | None = None) -> list[dict[str, Any]]:
+        avoid_block = ""
+        if avoid:
+            avoid_block = "\nThe student has ALREADY seen these questions. Do not repeat or lightly reword them; test different facts or angles:\n" + "\n".join(f"- {t[:160]}" for t in avoid[:12]) + "\n"
         prompt = f"""Create exactly {count} high-quality {ctx.level}-level MCQs.
 Subject: {ctx.subject}
 Topic: {ctx.topic}
@@ -68,7 +72,7 @@ Difficulty target: {ctx.difficulty}
 Use only the RAG context for factual content. Student memories may guide emphasis but are not evidence.
 Avoid duplicates. Exactly one option must be correct.
 Return a JSON object with a "questions" array. Each item must have: question, options (A/B/C/D), answer (A/B/C/D), explanation, concept, difficulty.
-
+{avoid_block}
 MEMORIES:
 {memory_prompt(memories)[:3000]}
 
@@ -246,6 +250,21 @@ class Orchestrator:
         return self.research.run(ctx)
 
     def practice_request(self, ctx: AgentContext, count: int = 10) -> list[dict[str, Any]]:
+        """Generate ``count`` MCQs the student has not seen before (one extra attempt if too many repeats)."""
         memories = self.memory_agent.retrieve(f"{ctx.subject} {ctx.topic} weaknesses mistakes")
-        questions = self.assessment.generate_mcqs(ctx, memories, count)
-        return self.assessment.validate(questions, ctx.rag_context, ctx.topic)
+        seen = progress.seen_hashes(ctx.student_id)
+        avoid = progress.recent_seen_texts(ctx.student_id, ctx.subject, ctx.topic)
+        fresh: list[dict[str, Any]] = []
+        stale: list[dict[str, Any]] = []
+        for attempt in range(2):
+            need = count - len(fresh)
+            if need <= 0:
+                break
+            batch = self.assessment.generate_mcqs(ctx, memories, need if attempt else count, avoid)
+            batch = self.assessment.validate(batch, ctx.rag_context, ctx.topic)
+            new_fresh, new_stale = progress.pick_fresh(batch, seen, fresh)
+            fresh += new_fresh
+            stale += new_stale
+            avoid = avoid + [q.get("question", "") for q in new_stale]
+        # Still short (small topic, everything already seen): top up with repeats so the quiz keeps its size.
+        return (fresh + stale)[:count]

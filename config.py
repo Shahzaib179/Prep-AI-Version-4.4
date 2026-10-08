@@ -31,6 +31,11 @@ UI_COLORS = {
 MEMORY_MAX_ITEMS = 5000         # hard cap of stored memories per student (meter runs 0 to 5000)
 MEMORY_WARN_RATIO = 0.80        # show a warning from this fill level
 
+# --- Progress / streaks ---------------------------------------------------
+PROGRESS_TZ_OFFSET_MIN = 300     # day boundaries follow this UTC offset (300 = Pakistan, UTC+5). Change for another country.
+DEFAULT_DAILY_GOAL = 20          # questions per day
+XP_PER_ANSWER, XP_PER_CORRECT, XP_PER_QUIZ, XP_PERFECT_BONUS = 2, 3, 10, 20
+
 # --- Quiz timer / size limits -------------------------------------------------
 QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS = 5, 100
 QUIZ_MAX_MINUTES = 300          # 0 minutes always means "no time limit"

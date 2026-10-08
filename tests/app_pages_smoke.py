@@ -79,6 +79,9 @@ class FakeSt(types.ModuleType):
     def button(label, key=None, **k): return OVR.get(key or label, False)
     form_submit_button = button
     @staticmethod
+    def time_input(label, value=None, key=None, **k): return OVR.get(key or label, value)
+    popover = staticmethod(lambda *a, **k: Ctx())
+    @staticmethod
     def file_uploader(*a, **k): return None
     @staticmethod
     def audio_input(*a, **k): return None
@@ -94,6 +97,7 @@ import memory as _m
 _m.embed_texts = lambda texts: __import__("numpy").ones((len(texts), 4), dtype="float32")
 
 SRC = (ROOT / "app.py").read_text()
+QS_OPT = [{"question": f"OptQ{i}", "options": {"A": "a", "B": "b", "C": "c", "D": "d"}, "answer": "A", "concept": "c", "explanation": "e", "difficulty": "Medium"} for i in range(3)]
 QS = [{"question": f"Q{i}", "options": {"A": "a", "B": "b"}, "answer": "A", "concept": "c", "explanation": "e", "difficulty": "Medium"} for i in range(3)]
 
 def run(page, **state):
@@ -116,13 +120,26 @@ import db
 # ---- sign in as a new student, then visit every page
 g = run("Dashboard")
 check("dashboard renders (rings + donut charts)", OUT.count("CHART") >= 3, OUT[:5])
-for p in ("Learn", "Practice", "Exam", "Published Quizzes", "AI Tutor", "Merit Calculator", "Path Finder", "Study Plan", "Memory", "History", "Settings"):
+for p in ("Today", "Learn", "Practice", "Exam", "Mock Test", "My Classes", "Published Quizzes", "AI Tutor", "Merit Calculator", "Path Finder", "Study Plan", "Memory", "History", "Settings"):
     try:
         run(p); check(f"page '{p}' runs", True)
     except Exception as e:
         check(f"page '{p}' runs", False, repr(e))
 run("Memory"); check("memory page shows usage meter", any("Memories stored" in o for o in OUT))
 run("Settings"); check("settings has Appearance", any("Appearance" in o for o in OUT))
+
+# ---- Today page: progress strip, goal, retake of past mistakes (no AI needed)
+run("Today"); check("Today page shows streak/level/goal", any(o.startswith("METRIC 🔥 Streak") for o in OUT) and any(o.startswith("METRIC 🎯 Today") for o in OUT), OUT[:10])
+run("Dashboard"); check("dashboard shows the progress strip", any(o.startswith("METRIC 🔥 Streak") for o in OUT))
+db.ensure_student("stu9", "Retaker")
+db.record_quiz("stu9", "Biology", "Cells", QS_OPT, {0: "B", 1: "A", 2: "C"}, "Medium")
+ss0 = fake.session_state
+OVR["retake_btn"] = True; run("Today", student_id="stu9", student_name="Retaker", quiz=None); OVR.clear()
+check("retake quiz starts from past mistakes", ss0["quiz"] and ss0["quiz"].get("origin") == "retake" and len(ss0["quiz"]["questions"]) == 2, ss0.get("quiz"))
+uidr = ss0["quiz"]["uid"]; OVR["start_" + uidr] = True; run("Today", student_id="stu9", student_name="Retaker"); OVR.clear()
+ss0["quiz"]["answers"] = {0: "A", 1: "A"}; OVR["submit_" + uidr] = True; run("Today", student_id="stu9", student_name="Retaker"); OVR.clear()
+check("retake result earns XP and fixes the mistakes", ss0["quiz"]["result"] and ss0["quiz"]["result"].get("xp", 0) > 0 and db.progress.retakeable_mistakes("stu9") == [], ss0["quiz"].get("result"))
+ss0["quiz"] = None; ss0["student_id"] = "stu1"; ss0["student_name"] = "Ali"
 
 # ---- tutor navigation + dashboard
 run("Dashboard", is_tutor=False); 
@@ -230,6 +247,81 @@ check("each student gets a different order", len(set(orders)) > 1, orders)
 ss["shared_quiz"] = None
 run("Published Quizzes", student_id="a1", student_name="a1", is_tutor=False)
 check("students see results as locked", any("visible only to the tutor" in o for o in OUT), OUT[:6])
+
+# ---- question bank, editor and option shuffling (tutor flow)
+import bank, question_tools as _qt
+for i, q in enumerate(QS_OPT * 3):                                    # 9 distinct 4-option questions
+    bank.add_question(tid, dict(q, question=f"Bank question number {i} about cells?"), "Biology", "Cells")
+OVR["bq_go"] = True; OVR["bq_n"] = 6; OVR["bq_subject"] = "Biology"
+ss["quiz"] = None; run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+check("tutor builds a quiz from the bank", ss["quiz"] and len(ss["quiz"]["questions"]) == 6, ss.get("quiz"))
+quid = ss["quiz"]["uid"]
+OVR[f"ed_{quid}_0_0_q"] = "EDITED: which organelle makes ATP in the cell?"; OVR[f"ed_{quid}_0_0_ans"] = "C"; OVR[f"ed_{quid}_0_1_del"] = True
+OVR["Apply edits"] = True; run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+check("editor applies text/answer edits and removes a question", len(ss["quiz"]["questions"]) == 5 and ss["quiz"]["questions"][0]["question"].startswith("EDITED") and ss["quiz"]["questions"][0]["answer"] == "C", [q["question"][:20] for q in ss["quiz"]["questions"]])
+OVR[f"ed_{quid}_1_0_ans"] = "Z"
+# an invalid edit must not be applied
+n_before = len(ss["quiz"]["questions"]); OVR[f"ed_{quid}_1_1_A"] = ""; OVR["Apply edits"] = True
+run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+check("invalid edit is refused and the old question kept", len(ss["quiz"]["questions"]) == n_before and all(not _qt.validate_question(q) for q in ss["quiz"]["questions"]), OUT[-4:])
+quid = ss["quiz"]["uid"]; OVR["share_btn_" + quid] = True; run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+ocode = ss["quiz"].get("share_code_created"); check("edited quiz published", bool(ocode))
+letters_of_correct = []
+for sid in ("o1", "o2", "o3", "o4", "o5", "o6"):
+    ss["shared_quiz"] = None; OVR["Quiz code"] = ocode; OVR["Open quiz"] = True
+    run("Published Quizzes", student_id=sid, student_name=sid, is_tutor=False); OVR.clear()
+    qz = ss["shared_quiz"]; texts = {q["question"]: q["options"][q["answer"]] for q in qz["questions"]}
+    orig = {q["question"]: q["options"][q["answer"]] for q in db.get_shared_quiz(ocode)["questions"]}
+    if sid == "o1": check("shuffle keeps the correct TEXT correct for every question", texts == orig, (texts, orig))
+    letters_of_correct.append(tuple(q["answer"] for q in sorted(qz["questions"], key=lambda q: q["question"])))
+    OVR["start_" + qz["uid"]] = True; run("Published Quizzes", student_id=sid, student_name=sid, is_tutor=False); OVR.clear()
+    qz["answers"] = {i: q["answer"] for i, q in enumerate(qz["questions"])}; OVR["submit_" + qz["uid"]] = True
+    run("Published Quizzes", student_id=sid, student_name=sid, is_tutor=False); OVR.clear()
+    if sid == "o1": check("a student answering by the shuffled letters scores 100%", qz["result"] and qz["result"]["pct"] == 100.0, qz.get("result"))
+check("different students see different option orders", len(set(letters_of_correct)) > 1, letters_of_correct)
+
+# ---- mock test mode
+import mock as _mock, classes as _cls
+from datetime import date as _d, time as _t, timedelta as _td
+for subj in ("Biology", "Chemistry"):
+    for i in range(6):
+        bank.add_question("mk1", dict(QS_OPT[0], question=f"Mock {subj} question number {i} here?"), subj, "T")
+run("Mock Test", student_id="mk1", student_name="Mk"); check("Mock Test page runs", any("Mock Test" in o for o in OUT), OUT[:4])
+OVR.update({"mk_type": "Custom", "mk_c_Biology": 4, "mk_c_Chemistry": 3, "mk_c_Physics": 0, "mk_c_English": 0, "mk_c_Logical Reasoning": 0, "mk_ai": False, "mk_build": True})
+ss["mock"] = None; run("Mock Test", student_id="mk1", student_name="Mk"); OVR.clear()
+mq = ss.get("mock"); check("mock test is built from the bank", mq and len(mq["questions"]) == 7, mq and len(mq["questions"]))
+check("mock progress saved for resume", _mock.load_progress("mk1") is not None)
+OVR["mk_start_" + mq["uid"]] = True; run("Mock Test", student_id="mk1", student_name="Mk"); OVR.clear()
+check("mock clock starts on click", mq["started_at"] is not None)
+mq["answers"] = {i: q["answer"] for i, q in enumerate(mq["questions"][:5])}; mq["answer_ts"] = {i: mq["started_at"] + 1 for i in mq["answers"]}
+OVR["mk_submit_" + mq["uid"]] = True; run("Mock Test", student_id="mk1", student_name="Mk"); OVR.clear()
+check("mock result has section scores and is saved", mq["result"] and mq.get("scores") and len(_mock.history("mk1")) == 1 and _mock.load_progress("mk1") is None, mq.get("result"))
+ss["mock"] = None
+
+# ---- classes with deadlines
+cl = _cls.create_class(tid, "Morning batch")
+run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); check("tutor Classes tab renders", any("Classes and deadlines" in o for o in OUT), OUT[:5])
+ok, _m_, _c = _cls.join_class("cs1", cl["join_code"]); check("student joins class by code", ok)
+dcode = db.create_shared_quiz(tid, "Due quiz", "Biology", "Cells", "Medium", QS, 0)
+soon = _cls.local_to_utc_iso(_d.today() + _td(days=2), _t(12, 0))
+check("assignment with future deadline created", _cls.create_assignment(tid, cl["id"], dcode, "", soon, False)[0])
+ss["shared_quiz"] = None
+try: run("My Classes", student_id="cs1", student_name="Cs", is_tutor=False)
+except Exception as e: import traceback; traceback.print_exc()
+check("My Classes lists the assignment", any("Due quiz" in o or "due" in o for o in OUT), OUT[6:])
+ss["shared_quiz"] = None; OVR["Quiz code"] = dcode; OVR["Open quiz"] = True; run("Published Quizzes", student_id="cs1", student_name="Cs", is_tutor=False); OVR.clear()
+check("student can open the assigned quiz before the deadline", ss["shared_quiz"] is not None)
+import sqlite3
+with db.connect() as _con: _con.execute("UPDATE assignments SET due_at=? WHERE quiz_code=?", ("2020-01-01T00:00", dcode))
+ss["shared_quiz"] = None; OVR["Quiz code"] = dcode; OVR["Open quiz"] = True; run("Published Quizzes", student_id="cs1", student_name="Cs", is_tutor=False); OVR.clear()
+check("late start is blocked after the deadline", ss["shared_quiz"] is None and any("deadline" in o for o in OUT), OUT[:4])
+ss["shared_quiz"] = None; OVR["Quiz code"] = dcode; OVR["Open quiz"] = True; run("Published Quizzes", student_id="outsider", student_name="Out", is_tutor=False); OVR.clear()
+check("students outside the class are not bound by the deadline", ss["shared_quiz"] is not None)
+ss["shared_quiz"] = None
+with db.connect() as _con: _con.execute("UPDATE assignments SET allow_late=1 WHERE quiz_code=?", (dcode,))
+OVR["Quiz code"] = dcode; OVR["Open quiz"] = True; run("Published Quizzes", student_id="cs1", student_name="Cs", is_tutor=False); OVR.clear()
+check("allow-late lets the student start (with a warning)", ss["shared_quiz"] is not None and any("late" in o for o in OUT), OUT[:4])
+ss["shared_quiz"] = None
 
 # ---- memory reset button
 from memory import LongTermMemory

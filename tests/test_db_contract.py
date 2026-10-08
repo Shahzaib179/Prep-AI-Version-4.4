@@ -25,7 +25,7 @@ for name in ("groq", "ddgs", "sentence_transformers", "faiss"):
 TMP = pathlib.Path(tempfile.mkdtemp())
 import config
 config.DB_PATH = TMP / "contract.db"
-import db, db_core, memory, migrations  # noqa: E402
+import db, db_core, memory, migrations, progress  # noqa: E402
 
 REMOTE = db_core.is_postgres()
 if REMOTE and os.environ.get("CONTRACT_ALLOW_RESET") != "yes":
@@ -44,8 +44,10 @@ IDS = ["ct_a", "ct_b", "ct_tutor", "ct_m1", "ct_m2"]
 
 def wipe():
     with db_core.connect() as con:
-        for t in ("question_attempts", "mistakes", "mastery", "revision_schedule", "quiz_attempts", "achievements", "agent_sessions", "memory_vectors", "memories", "merit_results", "student_preferences"):
+        for t in ("question_attempts", "mistakes", "mastery", "revision_schedule", "quiz_attempts", "achievements", "agent_sessions", "memory_vectors", "memories", "merit_results", "student_preferences", "daily_activity", "seen_questions"):
             con.execute(f"DELETE FROM {t} WHERE student_id LIKE 'ct\\_%' ESCAPE '\\'")
+        con.execute("DELETE FROM mock_results WHERE student_id LIKE 'ct\\_%' ESCAPE '\\'")
+        con.execute("DELETE FROM mock_progress WHERE student_id LIKE 'ct\\_%' ESCAPE '\\'")
         con.execute("DELETE FROM shared_quiz_starts WHERE student_id LIKE 'ct\\_%' ESCAPE '\\'")
         con.execute("DELETE FROM shared_quizzes WHERE created_by LIKE 'ct\\_%' ESCAPE '\\'")
         con.execute("DELETE FROM students WHERE id LIKE 'ct\\_%' ESCAPE '\\'")
@@ -142,6 +144,17 @@ class Contract(unittest.TestCase):
         with db_core.connect() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM memory_vectors WHERE student_id='ct_m1'").fetchone()[0], 0)
 
+    def test_progress_upsert_streak_goal_seen_and_retake(self):
+        db.ensure_student("ct_a", "Ali")
+        db.record_quiz("ct_a", "Biology", "Cells", QS, {0: "A", 1: "B"}, "Medium")
+        db.record_quiz("ct_a", "Biology", "Cells", [dict(q, question="Other " + q["question"]) for q in QS], {0: "A", 1: "A", 2: "A"}, "Medium")   # 2nd quiz same day -> ON CONFLICT DO UPDATE
+        p = progress.get_progress("ct_a"); self.assertEqual((p["streak"], p["today_questions"]), (1, 5))
+        self.assertEqual(progress.set_daily_goal("ct_a", 10), 10); self.assertEqual(progress.get_daily_goal("ct_a"), 10)
+        self.assertEqual(len(progress.seen_hashes("ct_a")), 8)
+        QS_OPT = [dict(q, options={"A": "a", "B": "b", "C": "c", "D": "d"}) for q in QS]
+        db.record_quiz("ct_a", "Chemistry", "Atoms", [dict(q, question="Atoms " + q["question"]) for q in QS_OPT], {0: "B"}, "Medium")
+        self.assertEqual(len(progress.retakeable_mistakes("ct_a")), 2)   # the A/B-only question from quiz 1 + the new one
+
     def test_rollback_on_error(self):
         db.ensure_student("ct_a", "Ali")
         with self.assertRaises(RuntimeError):
@@ -165,6 +178,8 @@ class Translator(unittest.TestCase):
 
     def test_sql_in_db_py_has_no_sqlite_only_constructs(self):
         src = (ROOT / "db.py").read_text() + (ROOT / "memory.py").read_text() + (ROOT / "tutor_pages.py").read_text()
+        for extra in ("bank.py", "classes.py", "mock.py", "progress.py", "auth.py", "class_pages.py", "mock_pages.py", "bank_pages.py"):
+            src += (ROOT / extra).read_text()
         for bad in ("date('now')", "INSERT OR IGNORE", "INSERT OR REPLACE", "COLLATE NOCASE", "lastrowid", "AUTOINCREMENT"):
             self.assertNotIn(bad, src, f"{bad} is SQLite-only and breaks Postgres")
 

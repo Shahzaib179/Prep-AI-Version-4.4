@@ -24,9 +24,10 @@ import db_core, migrations  # noqa: E402
 # parents before children
 TABLES = ["students", "student_preferences", "study_sessions", "questions", "quiz_attempts", "question_attempts", "mistakes",
           "mastery", "revision_schedule", "study_plans", "achievements", "memories", "agent_sessions", "merit_results",
-          "shared_quizzes", "shared_quiz_starts", "goals"]
+          "shared_quizzes", "shared_quiz_starts", "goals", "daily_activity", "seen_questions",
+          "bank_questions", "classes", "class_members", "assignments", "mock_results", "mock_progress"]
 SERIAL = {"study_sessions", "questions", "quiz_attempts", "question_attempts", "mistakes", "study_plans", "achievements",
-          "memories", "agent_sessions", "merit_results", "goals"}
+          "memories", "agent_sessions", "merit_results", "goals", "bank_questions", "classes", "assignments", "mock_results"}
 
 
 def main() -> int:
