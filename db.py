@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from db_core import IntegrityError, connect, dialect  # noqa: F401  (re-exported: app code imports them from db)
+from db_core import cached_read
 from mastery_model import (
     MIN_ATTEMPTS_FOR_LABEL,
     STRONG_FROM,
@@ -60,6 +61,7 @@ def ensure_student(student_id: str, name: str = "Student") -> None:
         con.execute("INSERT INTO student_preferences(student_id) VALUES(?) ON CONFLICT(student_id) DO NOTHING", (student_id,))
 
 
+@cached_read(30)
 def get_student(student_id: str) -> dict[str, Any]:
     with connect() as con:
         row = con.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
@@ -77,6 +79,7 @@ def update_student(student_id: str, **fields: Any) -> None:
         con.execute(f"UPDATE students SET {sql} WHERE id=?", (*fields.values(), student_id))
 
 
+@cached_read(30)
 def get_preferences(student_id: str) -> dict[str, Any]:
     with connect() as con:
         row = con.execute("SELECT * FROM student_preferences WHERE student_id=?", (student_id,)).fetchone()
@@ -203,6 +206,7 @@ def schedule_revision(student_id: str, subject: str, topic: str, mastery_score: 
         con.execute("INSERT INTO revision_schedule(student_id,subject,topic,next_review,interval_days,mastery,last_studied) VALUES(?,?,?,?,?,?,?) ON CONFLICT(student_id,subject,topic) DO UPDATE SET next_review=excluded.next_review,interval_days=excluded.interval_days,mastery=excluded.mastery,last_studied=excluded.last_studied", (student_id, subject, topic, next_review, interval, mastery_score, studied_on or datetime.utcnow().isoformat()))
 
 
+@cached_read(30)
 def topic_mastery(student_id: str) -> list[dict[str, Any]]:
     """One row per (subject, topic): mastery pooled over ALL answers in that topic."""
     out = []
@@ -217,6 +221,7 @@ def topic_mastery(student_id: str) -> list[dict[str, Any]]:
     return out
 
 
+@cached_read(30)
 def weak_strong_areas(student_id: str, limit: int = 5) -> dict[str, list[dict[str, Any]]]:
     """Dashboard buckets. Topics with too few answers go to 'building' instead of being mislabeled."""
     rows = topic_mastery(student_id)
@@ -229,6 +234,7 @@ def weak_strong_areas(student_id: str, limit: int = 5) -> dict[str, list[dict[st
     }
 
 
+@cached_read(30)
 def get_topic_mastery(student_id: str, subject: str, topic: str) -> dict[str, Any] | None:
     for r in topic_mastery(student_id):
         if norm(r["subject"]) == norm(subject) and norm(r["topic"]) == norm(topic):
@@ -236,6 +242,7 @@ def get_topic_mastery(student_id: str, subject: str, topic: str) -> dict[str, An
     return None
 
 
+@cached_read(30)
 def dashboard_stats(student_id: str) -> dict[str, Any]:
     rows = _attempt_rows(student_id)
     topics = topic_mastery(student_id)
@@ -254,6 +261,7 @@ def dashboard_stats(student_id: str) -> dict[str, Any]:
     }
 
 
+@cached_read(30)
 def weak_topics(student_id: str, limit: int = 10, max_score: float | None = STRONG_FROM) -> list[dict[str, Any]]:
     """Concept rows that still need practice (below 75%), weakest first."""
     sql = ("SELECT subject,topic,concept,mastery_score,attempts,repeated_mistakes FROM mastery WHERE student_id=?")
@@ -268,18 +276,21 @@ def weak_topics(student_id: str, limit: int = 10, max_score: float | None = STRO
     return [dict(r) for r in rows]
 
 
+@cached_read(30)
 def recent_mistakes(student_id: str, limit: int = 10) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT * FROM mistakes WHERE student_id=? ORDER BY id DESC LIMIT ?", (student_id, limit)).fetchall()
     return [dict(r) for r in rows]
 
 
+@cached_read(30)
 def due_revisions(student_id: str) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT * FROM revision_schedule WHERE student_id=? AND next_review<=? ORDER BY mastery ASC", (student_id, _today())).fetchall()
     return [dict(r) for r in rows]
 
 
+@cached_read(30)
 def revision_recommendations(student_id: str, limit: int = 10) -> list[dict[str, Any]]:
     """Return weak topics that are worth revising even before their scheduled date."""
     with connect() as con:
@@ -312,6 +323,7 @@ def revision_recommendations(student_id: str, limit: int = 10) -> list[dict[str,
     return [dict(r) for r in rows]
 
 
+@cached_read(30)
 def upcoming_revisions(student_id: str, limit: int = 10) -> list[dict[str, Any]]:
     """Return scheduled revisions whose review date is still in the future."""
     with connect() as con:
@@ -329,6 +341,7 @@ def upcoming_revisions(student_id: str, limit: int = 10) -> list[dict[str, Any]]
     return [dict(r) for r in rows]
 
 
+@cached_read(30)
 def history(student_id: str, limit: int = 50) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT * FROM quiz_attempts WHERE student_id=? ORDER BY id DESC LIMIT ?", (student_id, limit)).fetchall()
@@ -345,6 +358,7 @@ def add_achievement(student_id: str, code: str, title: str) -> None:
         con.execute("INSERT INTO achievements(student_id,code,title,unlocked_at) VALUES(?,?,?,?) ON CONFLICT(student_id,code) DO NOTHING", (student_id, code, title, datetime.utcnow().isoformat()))
 
 
+@cached_read(30)
 def achievements(student_id: str) -> list[dict[str, Any]]:
     with connect() as con:
         return [dict(r) for r in con.execute("SELECT * FROM achievements WHERE student_id=? ORDER BY id DESC", (student_id,)).fetchall()]
@@ -355,6 +369,7 @@ def save_agent_session(student_id: str, agent_name: str, user_input: str, output
         con.execute("INSERT INTO agent_sessions(student_id,agent_name,user_input,output,created_at) VALUES(?,?,?,?,?)", (student_id, agent_name, user_input, output, datetime.utcnow().isoformat()))
 
 
+@cached_read(30)
 def get_agent_sessions(student_id: str, agent_name: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
     with connect() as con:
         if agent_name:
@@ -381,6 +396,7 @@ def save_merit_result(student_id: str, exam: str, formula_id: str, formula_name:
         )
 
 
+@cached_read(30)
 def merit_results(student_id: str, limit: int = 20) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT * FROM merit_results WHERE student_id=? ORDER BY id DESC LIMIT ?", (student_id, limit)).fetchall()
@@ -470,6 +486,7 @@ def set_shared_quiz_open(code: str, is_open: bool, owner_id: str | None = None) 
         return con.execute(sql, params).rowcount > 0
 
 
+@cached_read(30)
 def list_shared_quizzes(created_by: str | None = None) -> list[dict[str, Any]]:
     sql = ("SELECT s.code,s.title,s.subject,s.topic,s.difficulty,s.time_limit_sec,s.created_by,s.created_at,s.is_open,"
            "(SELECT COUNT(*) FROM quiz_attempts a WHERE a.shared_code=s.code) AS attempts,"
@@ -534,6 +551,7 @@ def shared_quiz_results(code: str) -> list[dict[str, Any]]:
 # -----------------------------------------------------------------------------
 # Tutor view: performance of every individual student
 # -----------------------------------------------------------------------------
+@cached_read(30)
 def roster(tutor_id: str | None = None) -> list[dict[str, Any]]:
     """One summary row per student (tutors are excluded).
 
@@ -564,6 +582,7 @@ def roster(tutor_id: str | None = None) -> list[dict[str, Any]]:
     return out
 
 
+@cached_read(30)
 def student_quiz_trend(student_id: str, limit: int = 200) -> list[dict[str, Any]]:
     """Quiz attempts oldest -> newest (for line charts)."""
     with connect() as con:
@@ -573,6 +592,7 @@ def student_quiz_trend(student_id: str, limit: int = 200) -> list[dict[str, Any]
     return [dict(r) for r in reversed(rows)]
 
 
+@cached_read(30)
 def subject_breakdown(student_id: str) -> list[dict[str, Any]]:
     """Accuracy per subject across every answered question."""
     groups: dict[str, list[int]] = {}

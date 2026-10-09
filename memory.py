@@ -8,7 +8,7 @@ import numpy as np
 
 from config import MEMORY_MAX_ITEMS, MEMORY_WARN_RATIO
 from db import connect, delete_agent_sessions
-from db_core import db_identity
+from db_core import cached_read, db_identity
 from rag import embed_texts
 
 
@@ -41,10 +41,28 @@ _CACHE: dict[str, tuple[tuple, VectorIndex | None, list[dict[str, Any]]]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
+@cached_read(30)
 def _signature(student_id: str) -> tuple:
     with connect() as con:
         row = con.execute("SELECT COUNT(*), COALESCE(MAX(id),0), COALESCE(SUM(id),0) FROM memories WHERE student_id=? AND is_active=1", (student_id,)).fetchone()
     return (int(row[0]), int(row[1]), int(row[2]))
+
+
+@cached_read(30)
+def _usage_raw(student_id: str) -> tuple[int, int, int, dict[str, int]]:
+    with connect() as con:
+        used = int(con.execute("SELECT COUNT(*) FROM memories WHERE student_id=? AND is_active=1", (student_id,)).fetchone()[0])
+        text_bytes = sum(len((r[0] or "").encode("utf-8")) for r in con.execute("SELECT content FROM memories WHERE student_id=? AND is_active=1", (student_id,)).fetchall())
+        vector_bytes = int(con.execute("SELECT COALESCE(SUM(dim),0) FROM memory_vectors WHERE student_id=?", (student_id,)).fetchone()[0]) * 4
+        by_type = {r[0] or "other": int(r[1]) for r in con.execute("SELECT memory_type, COUNT(*) FROM memories WHERE student_id=? AND is_active=1 GROUP BY memory_type ORDER BY 2 DESC", (student_id,)).fetchall()}
+    return used, text_bytes, vector_bytes, by_type
+
+
+@cached_read(30)
+def _recent_rows(student_id: str, limit: int) -> list[dict[str, Any]]:
+    with connect() as con:
+        rows = con.execute("SELECT * FROM memories WHERE student_id=? AND is_active=1 ORDER BY id DESC LIMIT ?", (student_id, limit)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def _to_blob(vector: np.ndarray) -> bytes:
@@ -130,11 +148,7 @@ class LongTermMemory:
 
     def usage(self) -> dict[str, Any]:
         """How much of this student's memory allowance is in use."""
-        with connect() as con:
-            used = int(con.execute("SELECT COUNT(*) FROM memories WHERE student_id=? AND is_active=1", (self.student_id,)).fetchone()[0])
-            text_bytes = sum(len((r[0] or "").encode("utf-8")) for r in con.execute("SELECT content FROM memories WHERE student_id=? AND is_active=1", (self.student_id,)).fetchall())
-            vector_bytes = int(con.execute("SELECT COALESCE(SUM(dim),0) FROM memory_vectors WHERE student_id=?", (self.student_id,)).fetchone()[0]) * 4
-            by_type = {r[0] or "other": int(r[1]) for r in con.execute("SELECT memory_type, COUNT(*) FROM memories WHERE student_id=? AND is_active=1 GROUP BY memory_type ORDER BY 2 DESC", (self.student_id,)).fetchall()}
+        used, text_bytes, vector_bytes, by_type = _usage_raw(self.student_id)
         ratio = min(1.0, used / MEMORY_MAX_ITEMS) if MEMORY_MAX_ITEMS else 0.0
         return {
             "used": used, "limit": MEMORY_MAX_ITEMS, "free": max(0, MEMORY_MAX_ITEMS - used),
@@ -185,9 +199,7 @@ class LongTermMemory:
         return result
 
     def recent(self, limit: int = 10) -> list[dict[str, Any]]:
-        with connect() as con:
-            rows = con.execute("SELECT * FROM memories WHERE student_id=? AND is_active=1 ORDER BY id DESC LIMIT ?", (self.student_id, limit)).fetchall()
-        return [dict(r) for r in rows]
+        return _recent_rows(self.student_id, limit)
 
     def clear(self) -> None:
         with connect() as con:

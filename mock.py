@@ -20,6 +20,7 @@ import bank
 import progress
 import question_tools as qt
 from db_core import connect
+from db_core import cached_read
 
 NEGATIVE_PENALTY = 0.25
 SECTION_ORDER = ["Biology", "Chemistry", "Physics", "English", "Logical Reasoning"]
@@ -165,6 +166,7 @@ def save_result(student_id: str, quiz_id: int | None, blueprint: str, scores: di
              int(scores["negative"]), taken_sec, json.dumps(scores["sections"]), datetime.utcnow().isoformat()))
 
 
+@cached_read(30)
 def history(student_id: str, limit: int = 30) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT * FROM mock_results WHERE student_id=? ORDER BY id DESC LIMIT ?", (student_id, limit)).fetchall()
@@ -190,6 +192,7 @@ def save_progress(student_id: str, quiz: dict[str, Any]) -> None:
                     (student_id, json.dumps(state), datetime.utcnow().isoformat()))
 
 
+@cached_read(30)
 def load_progress(student_id: str) -> dict[str, Any] | None:
     with connect() as con:
         row = con.execute("SELECT state_json FROM mock_progress WHERE student_id=?", (student_id,)).fetchone()

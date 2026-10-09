@@ -185,6 +185,26 @@ def _m007_mock(con: Connection) -> None:
     con.execute("CREATE TABLE IF NOT EXISTS mock_progress (student_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT)")
 
 
+def _m008_month2(con: Connection) -> None:
+    t = _types(con)
+    # daily challenge: one shared question set per day, one result per student per day
+    con.execute("CREATE TABLE IF NOT EXISTS daily_challenges (day TEXT PRIMARY KEY, questions_json TEXT NOT NULL, subject_mix TEXT, created_at TEXT)")
+    con.execute("CREATE TABLE IF NOT EXISTS daily_results (student_id TEXT NOT NULL, day TEXT NOT NULL, correct INTEGER, total INTEGER, taken_sec INTEGER, xp INTEGER DEFAULT 0, created_at TEXT, PRIMARY KEY(student_id, day))")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_daily_results_day ON daily_results(day)")
+    # live quizzes (tutor hosts, students answer in real time)
+    con.execute(f"""CREATE TABLE IF NOT EXISTS live_sessions (id {t['PK']}, code TEXT NOT NULL UNIQUE, host_id TEXT NOT NULL, title TEXT, questions_json TEXT NOT NULL,
+        state TEXT DEFAULT 'lobby', q_index INTEGER DEFAULT -1, q_started_at {t['REAL']}, seconds_per_q INTEGER DEFAULT 20, created_at TEXT, finished_at TEXT)""")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_live_host ON live_sessions(host_id, id)")
+    con.execute("CREATE TABLE IF NOT EXISTS live_players (session_id INTEGER NOT NULL, student_id TEXT NOT NULL, name TEXT, score INTEGER DEFAULT 0, correct INTEGER DEFAULT 0, joined_at TEXT, PRIMARY KEY(session_id, student_id))")
+    con.execute("CREATE TABLE IF NOT EXISTS live_answers (session_id INTEGER NOT NULL, student_id TEXT NOT NULL, q_index INTEGER NOT NULL, choice TEXT, is_correct INTEGER DEFAULT 0, points INTEGER DEFAULT 0, ms_used INTEGER, answered_at TEXT, PRIMARY KEY(session_id, student_id, q_index))")
+    # WhatsApp reminders (opt-in) and a send log that prevents duplicates
+    con.execute("CREATE TABLE IF NOT EXISTS reminder_prefs (student_id TEXT PRIMARY KEY, phone TEXT, enabled INTEGER DEFAULT 0, hour_local INTEGER DEFAULT 19, consented_at TEXT, kinds TEXT DEFAULT 'streak,revision,assignment,daily', updated_at TEXT)")
+    con.execute(f"CREATE TABLE IF NOT EXISTS reminder_log (id {t['PK']}, student_id TEXT NOT NULL, day TEXT NOT NULL, kind TEXT, status TEXT, detail TEXT, sent_at TEXT)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_reminder_log ON reminder_log(student_id, day)")
+    # AI quality reports written by scripts/run_ai_eval.py
+    con.execute(f"CREATE TABLE IF NOT EXISTS ai_eval_runs (id {t['PK']}, created_at TEXT, model TEXT, summary_json TEXT)")
+
+
 MIGRATIONS: list[tuple[int, str, Callable[[Connection], None]]] = [
     (1, "baseline schema", _m001_baseline),
     (2, "app_meta + memory_vectors", _m002_meta_and_vectors),
@@ -193,6 +213,7 @@ MIGRATIONS: list[tuple[int, str, Callable[[Connection], None]]] = [
     (5, "question bank + option shuffle flag", _m005_bank),
     (6, "classes + assignments", _m006_classes),
     (7, "mock tests", _m007_mock),
+    (8, "daily challenge, live quizzes, reminders, AI eval runs", _m008_month2),
 ]
 
 
@@ -200,6 +221,7 @@ def migrate() -> list[int]:
     """Apply every pending migration. Safe to call on every app start. Returns the versions applied."""
     applied_now: list[int] = []
     with connect() as con:
+        con.begin()   # the advisory lock below lives only inside a transaction (Postgres connections run in autocommit)
         if con.dialect == "postgres":
             con.execute("SELECT pg_advisory_xact_lock(?)", (_PG_LOCK_KEY,))
         con.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT)")

@@ -309,3 +309,6 @@ Streaks, daily goal, XP/levels, Today page, mistake retake and no-repeat questio
 
 ## v4.6
 Question bank, question editing, option shuffling, tutor classes with deadlines and mock test mode: see [docs/V4.6_MONTH1.md](docs/V4.6_MONTH1.md).
+
+## v4.7
+Supabase speed fix, Daily Challenge + streak calendar, live quizzes, WhatsApp reminders and the AI test set: see [docs/V4.7_MONTH2.md](docs/V4.7_MONTH2.md).

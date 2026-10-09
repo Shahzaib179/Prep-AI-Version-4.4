@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import config
-from db_core import connect
+from db_core import cached_read, connect
 
 STREAK_MILESTONES = {3: ("streak_3", "3-day streak"), 7: ("streak_7", "7-day streak"), 14: ("streak_14", "14-day streak"), 30: ("streak_30", "30-day streak")}
 LEVEL_XP = 50          # level n starts at 50 * (n-1)^2 XP  ->  L2=50, L3=200, L4=450, L5=800 ...
@@ -40,11 +40,18 @@ def level_info(total_xp: int) -> dict[str, int]:
     return {"level": level, "xp_into_level": total_xp - start, "xp_for_next": nxt - start, "next_level_at": nxt}
 
 
+def add_bonus_xp(student_id: str, xp: int, day: date | None = None) -> None:
+    """Extra XP that does not count as answered questions (daily challenge bonus)."""
+    day = (day or local_today()).isoformat()
+    with connect() as con:
+        con.execute("INSERT INTO daily_activity(student_id,day,questions,correct,quizzes,xp) VALUES(?,?,0,0,0,?) ON CONFLICT(student_id,day) DO UPDATE SET xp=daily_activity.xp+excluded.xp", (student_id, day, int(xp)))
+
+
 # ------------------------------------------------------------------ activity log
-def record_activity(student_id: str, answered: int, correct: int, perfect: bool = False, day: date | None = None) -> int:
+def record_activity(student_id: str, answered: int, correct: int, perfect: bool = False, day: date | None = None, bonus_xp: int = 0) -> int:
     """Add one finished quiz to today's totals. Returns the XP earned."""
     day = day or local_today()
-    xp = xp_for(answered, correct, True, perfect)
+    xp = xp_for(answered, correct, True, perfect) + int(bonus_xp)
     with connect() as con:
         con.execute(
             "INSERT INTO daily_activity(student_id,day,questions,correct,quizzes,xp) VALUES(?,?,?,?,1,?) "
@@ -55,6 +62,7 @@ def record_activity(student_id: str, answered: int, correct: int, perfect: bool 
     return xp
 
 
+@cached_read(30)
 def _active_days(student_id: str) -> list[date]:
     with connect() as con:
         rows = con.execute("SELECT day FROM daily_activity WHERE student_id=? AND questions>0 ORDER BY day", (student_id,)).fetchall()
@@ -82,6 +90,7 @@ def streaks(days: list[date], today: date) -> tuple[int, int]:
     return cur, best
 
 
+@cached_read(30)
 def get_daily_goal(student_id: str) -> int:
     with connect() as con:
         row = con.execute("SELECT daily_goal FROM student_preferences WHERE student_id=?", (student_id,)).fetchone()
@@ -95,6 +104,7 @@ def set_daily_goal(student_id: str, goal: int) -> int:
     return goal
 
 
+@cached_read(30)
 def get_progress(student_id: str, today: date | None = None) -> dict[str, Any]:
     today = today or local_today()
     days = _active_days(student_id)
@@ -170,6 +180,7 @@ def pick_fresh(candidates: list[dict[str, Any]], seen: set[str], already: list[d
 
 
 # ------------------------------------------------------------------ mistakes that can be re-asked
+@cached_read(30)
 def retakeable_mistakes(student_id: str, limit: int = 20) -> list[dict[str, Any]]:
     """Most recent wrong answers that stored their options, rebuilt as MCQs (newest first, no duplicates)."""
     with connect() as con:

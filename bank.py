@@ -9,6 +9,7 @@ from typing import Any
 import progress
 import question_tools as qt
 from db_core import connect
+from db_core import cached_read
 
 SOURCES = ("manual", "ai", "quiz", "csv")
 
@@ -102,6 +103,7 @@ def _filters(owner_id: str, subject: str | None, topic: str | None, difficulty: 
     return " AND ".join(where), params
 
 
+@cached_read(30)
 def list_questions(owner_id: str, subject: str | None = None, topic: str | None = None, difficulty: str | None = None, search: str | None = None,
                    limit: int = 25, offset: int = 0) -> list[dict[str, Any]]:
     where, params = _filters(owner_id, subject, topic, difficulty, search)
@@ -110,12 +112,14 @@ def list_questions(owner_id: str, subject: str | None = None, topic: str | None 
     return [_row(r) for r in rows]
 
 
+@cached_read(30)
 def count_questions(owner_id: str, subject: str | None = None, topic: str | None = None, difficulty: str | None = None, search: str | None = None) -> int:
     where, params = _filters(owner_id, subject, topic, difficulty, search)
     with connect() as con:
         return int(con.execute(f"SELECT COUNT(*) FROM bank_questions WHERE {where}", params).fetchone()[0])
 
 
+@cached_read(30)
 def subject_counts(owner_id: str) -> dict[str, int]:
     with connect() as con:
         return {(r[0] or "Unsorted"): int(r[1]) for r in con.execute("SELECT subject, COUNT(*) FROM bank_questions WHERE owner_id=? GROUP BY subject ORDER BY 2 DESC", (owner_id,)).fetchall()}
@@ -157,6 +161,7 @@ def pick_for_student(student_id: str, subject: str, count: int, difficulty: str 
     return picked
 
 
+@cached_read(30)
 def available_for_student(student_id: str, subject: str) -> int:
     with connect() as con:
         return int(con.execute("SELECT COUNT(DISTINCT qhash) FROM bank_questions WHERE subject=? AND (owner_id=? OR is_shared=1)", (subject, student_id)).fetchone()[0])

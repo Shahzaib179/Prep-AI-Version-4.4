@@ -19,6 +19,9 @@ import os
 import re
 import sqlite3
 import threading
+import time as _time
+import copy
+import functools
 from collections.abc import Sequence
 from typing import Any, Iterable
 
@@ -156,26 +159,57 @@ class Cursor:
         return getattr(self._raw, "lastrowid", None)
 
 
+STATS = {"connects": 0, "queries": 0}   # cheap counters used by tests/perf_probe.py to count database round trips
+_WRITE_GEN = 0                            # bumped by every non-SELECT statement; invalidates cached_read() results
+
+
+def _is_read(sql: str) -> bool:
+    return sql.lstrip()[:6].upper() == "SELECT"
+
+
 class Connection:
     """Thin wrapper over a sqlite3 / psycopg connection."""
 
     def __init__(self, raw: Any, dialect_name: str, release=None):
         self._raw, self.dialect, self._release = raw, dialect_name, release
+        self._wrote = False   # did this connection change data? (read-only connections must not invalidate the read cache)
+        self._in_tx = False   # Postgres connections run in autocommit; a transaction is opened only when the first write arrives
 
     # -- statements
     def execute(self, sql: str, params: Sequence[Any] = ()) -> Cursor:
+        global _WRITE_GEN
+        STATS["queries"] += 1
+        read = _is_read(sql)
+        if not read:
+            _WRITE_GEN += 1
+            self._wrote = True
         if self.dialect == "postgres":
+            if not read and not self._in_tx:
+                self._raw.execute("BEGIN")
+                self._in_tx = True
             cur = self._raw.cursor()
             cur.execute(translate_for_postgres(sql), tuple(params))
             return Cursor(cur)
         return Cursor(self._raw.execute(sql, tuple(params)))
 
     def executemany(self, sql: str, seq: Iterable[Sequence[Any]]) -> None:
+        global _WRITE_GEN
+        _WRITE_GEN += 1
+        self._wrote = True
         if self.dialect == "postgres":
+            if not self._in_tx:
+                self._raw.execute("BEGIN")
+                self._in_tx = True
             cur = self._raw.cursor()
             cur.executemany(translate_for_postgres(sql), [tuple(p) for p in seq])
         else:
             self._raw.executemany(sql, [tuple(p) for p in seq])
+
+    def begin(self) -> None:
+        """Open a transaction now (Postgres connections are autocommit until the first write; use this before a lock)."""
+        if self.dialect == "postgres" and not self._in_tx:
+            self._raw.execute("BEGIN")
+            self._in_tx = True
 
     def insert(self, sql: str, params: Sequence[Any] = ()) -> int:
         """Run an INSERT into a table with an ``id`` column and return the new id."""
@@ -200,10 +234,24 @@ class Connection:
 
     # -- transaction scope
     def commit(self) -> None:
-        self._raw.commit()
+        global _WRITE_GEN
+        if self._wrote:
+            _WRITE_GEN += 1     # data became visible to other connections: cached reads taken before this are stale
+            self._wrote = False
+        if self.dialect == "postgres":
+            if self._in_tx:
+                self._in_tx = False
+                self._raw.execute("COMMIT")
+        else:
+            self._raw.commit()
 
     def rollback(self) -> None:
-        self._raw.rollback()
+        if self.dialect == "postgres":
+            if self._in_tx:
+                self._in_tx = False
+                self._raw.execute("ROLLBACK")
+        else:
+            self._raw.rollback()
 
     def close(self) -> None:
         raw, release, self._raw = self._raw, self._release, None
@@ -230,6 +278,8 @@ class Connection:
 
 # --------------------------------------------------------------------------- engines
 _pool: Any = None
+_LAST_USED: dict[int, float] = {}
+IDLE_PROBE_SEC = 20.0
 _pool_url = ""
 _pool_lock = threading.Lock()
 
@@ -278,11 +328,11 @@ def _get_pool(url: str):
         if psycopg is None:
             raise RuntimeError("DATABASE_URL points to Postgres but 'psycopg' is not installed. Run: pip install \"psycopg[binary]\" psycopg-pool")
         _preflight(url)
-        kwargs = {"row_factory": _pg_row_factory, "prepare_threshold": None, "autocommit": False}  # None = safe with Supabase/Neon poolers
+        kwargs = {"row_factory": _pg_row_factory, "prepare_threshold": None, "autocommit": True}  # None = safe with Supabase/Neon poolers
         try:
             from psycopg_pool import ConnectionPool
             _pool = ConnectionPool(url, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "5")), kwargs=kwargs,
-                                   check=ConnectionPool.check_connection, open=True, timeout=20)
+                                   open=True, timeout=20, max_idle=240)
         except ImportError:
             _pool = None
             raise RuntimeError("Postgres pooling needs 'psycopg-pool'. Run: pip install psycopg-pool")
@@ -315,15 +365,68 @@ def db_identity() -> str:
 
 
 def connect() -> Connection:
+    STATS["connects"] += 1
     if is_postgres():
         pool = _get_pool(database_url())
-        try:
-            raw = pool.getconn()
-        except Exception as exc:  # noqa: BLE001 - PoolTimeout etc.
-            raise DatabaseUnavailable(diagnose_connection_error(exc)) from None
-        return Connection(raw, "postgres", release=pool.putconn)
+        for attempt in range(3):
+            try:
+                raw = pool.getconn()
+            except Exception as exc:  # noqa: BLE001 - PoolTimeout etc.
+                raise DatabaseUnavailable(diagnose_connection_error(exc)) from None
+            # A connection used a moment ago is trusted (saves one round trip per query); one that sat idle is probed first.
+            if _time.monotonic() - _LAST_USED.get(id(raw), 0.0) > IDLE_PROBE_SEC:
+                try:
+                    raw.execute("SELECT 1")
+                except Exception:  # noqa: BLE001 - dead connection: hand it back (the pool discards it) and take another
+                    pool.putconn(raw)
+                    continue
+            break
+
+        def _release(c, _put=pool.putconn):
+            _LAST_USED[id(c)] = _time.monotonic()
+            _put(c)
+        return Connection(raw, "postgres", release=_release)
     raw = sqlite3.connect(_sqlite_path(), check_same_thread=False)
     raw.row_factory = sqlite3.Row
     raw.execute("PRAGMA foreign_keys = ON")
     raw.execute("PRAGMA busy_timeout = 5000")
     return Connection(raw, "sqlite")
+
+
+# --------------------------------------------------------------------------- read cache
+_READ_CACHE: dict[Any, tuple[int, float, Any]] = {}
+_READ_LOCK = threading.Lock()
+
+
+def cached_read(ttl: float = 30.0):
+    """Cache a read-only database function for a short time.
+
+    The cached value is dropped as soon as ANY write goes through this process (so a student always sees their own
+    changes at once) or after ``ttl`` seconds (so changes made by another server process show up soon). It turns the
+    ~20 repeated look-ups a page makes on every click into a handful of real round trips when the database is remote.
+    Never use it for security or deadline decisions, only for data shown on screen.
+    """
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = (db_identity(), fn.__module__, fn.__qualname__, args, tuple(sorted(kwargs.items())))
+            now = _time.monotonic()
+            with _READ_LOCK:
+                hit = _READ_CACHE.get(key)
+            if hit and hit[0] == _WRITE_GEN and now - hit[1] < ttl:
+                return copy.deepcopy(hit[2])
+            gen = _WRITE_GEN
+            value = fn(*args, **kwargs)
+            with _READ_LOCK:
+                if len(_READ_CACHE) > 2000:
+                    _READ_CACHE.clear()
+                _READ_CACHE[key] = (gen, now, copy.deepcopy(value))
+            return value
+        wrapper.__wrapped__ = fn
+        return wrapper
+    return deco
+
+
+def clear_read_cache() -> None:
+    with _READ_LOCK:
+        _READ_CACHE.clear()

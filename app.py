@@ -72,6 +72,10 @@ import classes
 import question_tools
 from class_pages import render_my_classes, render_tutor_classes
 from mock_pages import render_mock
+from daily_pages import render_daily
+from live_pages import render_host, render_player
+from reminder_pages import render_reminders
+from ai_quality_pages import render_ai_quality
 from bank_pages import render_add_from_bank, render_bank_manager, render_question_editor, render_save_to_bank
 from memory import LongTermMemory, memory_prompt, reset_memory
 from quiz_runtime import clock, elapsed_seconds, is_expired, iso_to_epoch, minutes_to_seconds, remaining_seconds, suggested_minutes
@@ -345,10 +349,12 @@ with st.sidebar:
         nav_pages = [
             "Dashboard",
             "Today",
+            "Daily Challenge",
             "Learn",
             "Practice",
             "Exam",
             "Mock Test",
+            "Live Quiz",
             f"My Classes ({_pend})" if _pend else "My Classes",
             "Published Quizzes",
             "AI Tutor",
@@ -877,7 +883,7 @@ def render_tutor_create_quiz() -> None:
 
 def render_tutor_home() -> None:
     hero("👩‍🏫 Tutor Dashboard", "Create a quiz, publish it for your students, and check how every student performed.")
-    tabs = st.tabs(["Create Quiz", "Question Bank", "Classes", "Publish", "My Published Quizzes", "Quiz Results", "Student Performance"])
+    tabs = st.tabs(["Create Quiz", "Question Bank", "Classes", "Live Quiz", "Publish", "My Published Quizzes", "Quiz Results", "Student Performance", "AI Quality"])
     with tabs[0]:
         render_tutor_create_quiz()
     with tabs[1]:
@@ -885,13 +891,17 @@ def render_tutor_home() -> None:
     with tabs[2]:
         render_tutor_classes(student_id)
     with tabs[3]:
-        render_publish_tab()
+        render_host(student_id, {"quiz": st.session_state.get("quiz")})
     with tabs[4]:
-        render_my_published_tab()
+        render_publish_tab()
     with tabs[5]:
-        render_quiz_results()
+        render_my_published_tab()
     with tabs[6]:
+        render_quiz_results()
+    with tabs[7]:
         render_student_performance()
+    with tabs[8]:
+        render_ai_quality(student_id)
 
 
 def render_memory_meter(memory: LongTermMemory, detailed: bool = False) -> dict:
@@ -1946,7 +1956,9 @@ def render_settings() -> None:
 
 routes = {
     "Dashboard": render_dashboard,
-    "Today": lambda: render_today(student_id, st.session_state.student_name, new_quiz, render_quiz_taker),
+    "Today": lambda: (render_today(student_id, st.session_state.student_name, new_quiz, render_quiz_taker), render_reminders(student_id, st.session_state.student_name)),
+    "Daily Challenge": lambda: render_daily(student_id, new_quiz, render_quiz_taker, generate_mock_questions),
+    "Live Quiz": lambda: render_player(student_id, st.session_state.student_name),
     "Learn": render_learn,
     "Practice": render_practice,
     "Exam": render_exam,

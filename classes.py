@@ -12,7 +12,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import config
-from db_core import connect, IntegrityError
+from db_core import cached_read, connect, IntegrityError
 
 _ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 DUE_SOON_HOURS = 48
@@ -66,6 +66,7 @@ def get_class(class_id: int) -> dict[str, Any] | None:
     return dict(r) if r else None
 
 
+@cached_read(30)
 def list_classes(tutor_id: str, include_archived: bool = False) -> list[dict[str, Any]]:
     sql = ("SELECT c.id,c.name,c.join_code,c.created_at,c.is_active,"
            "(SELECT COUNT(*) FROM class_members m WHERE m.class_id=c.id) AS members,"
@@ -113,6 +114,7 @@ def remove_member(tutor_id: str, class_id: int, student_id: str) -> bool:
         return con.execute("DELETE FROM class_members WHERE class_id=? AND student_id=?", (class_id, student_id)).rowcount > 0
 
 
+@cached_read(30)
 def members(tutor_id: str, class_id: int) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT m.student_id, COALESCE(s.name, m.student_id) AS name, m.joined_at FROM class_members m JOIN classes c ON c.id=m.class_id "
@@ -120,6 +122,7 @@ def members(tutor_id: str, class_id: int) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+@cached_read(30)
 def my_classes(student_id: str) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT c.id,c.name,c.is_active,COALESCE(t.name,'Tutor') AS tutor_name FROM class_members m JOIN classes c ON c.id=m.class_id "
@@ -176,6 +179,7 @@ def status_for(due_at: str | None, allow_late: bool, attempt: dict[str, Any] | N
     return "due_soon" if due - now <= timedelta(hours=DUE_SOON_HOURS) else "open"
 
 
+@cached_read(30)
 def student_assignments(student_id: str, now: datetime | None = None) -> list[dict[str, Any]]:
     with connect() as con:
         rows = con.execute("SELECT a.id,a.class_id,a.quiz_code,a.title,a.due_at,a.allow_late,c.name AS class_name,q.is_open,q.time_limit_sec FROM assignments a "
@@ -211,6 +215,7 @@ def deadline_state(student_id: str, quiz_code: str, now: datetime | None = None)
     return best
 
 
+@cached_read(30)
 def assignment_report(tutor_id: str, assignment_id: int) -> dict[str, Any] | None:
     with connect() as con:
         a = con.execute("SELECT a.id,a.class_id,a.quiz_code,a.title,a.due_at,a.allow_late,c.name AS class_name FROM assignments a JOIN classes c ON c.id=a.class_id WHERE a.id=? AND a.tutor_id=?", (assignment_id, tutor_id)).fetchone()
@@ -230,12 +235,14 @@ def assignment_report(tutor_id: str, assignment_id: int) -> dict[str, Any] | Non
             "average": round(sum(r["score"] for r in done) / len(done), 1) if done else None}
 
 
+@cached_read(30)
 def list_assignments(tutor_id: str, class_id: int) -> list[dict[str, Any]]:
     with connect() as con:
         ids = [r[0] for r in con.execute("SELECT id FROM assignments WHERE class_id=? AND tutor_id=? ORDER BY id DESC", (class_id, tutor_id)).fetchall()]
     return [assignment_report(tutor_id, i) for i in ids if i]
 
 
+@cached_read(30)
 def pending_count(student_id: str) -> int:
     """Assignments the student still has to do (for the sidebar badge)."""
     return sum(1 for a in student_assignments(student_id) if a["status"] in ("overdue", "due_soon", "open"))

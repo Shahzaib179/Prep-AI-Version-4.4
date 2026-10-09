@@ -178,7 +178,7 @@ class Translator(unittest.TestCase):
 
     def test_sql_in_db_py_has_no_sqlite_only_constructs(self):
         src = (ROOT / "db.py").read_text() + (ROOT / "memory.py").read_text() + (ROOT / "tutor_pages.py").read_text()
-        for extra in ("bank.py", "classes.py", "mock.py", "progress.py", "auth.py", "class_pages.py", "mock_pages.py", "bank_pages.py"):
+        for extra in ("bank.py", "classes.py", "mock.py", "progress.py", "auth.py", "class_pages.py", "mock_pages.py", "bank_pages.py", "daily.py", "live.py", "reminders.py", "ai_eval.py", "daily_pages.py", "live_pages.py", "reminder_pages.py", "ai_quality_pages.py"):
             src += (ROOT / extra).read_text()
         for bad in ("date('now')", "INSERT OR IGNORE", "INSERT OR REPLACE", "COLLATE NOCASE", "lastrowid", "AUTOINCREMENT"):
             self.assertNotIn(bad, src, f"{bad} is SQLite-only and breaks Postgres")

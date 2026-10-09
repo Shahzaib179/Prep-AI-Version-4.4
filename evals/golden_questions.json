@@ -1,0 +1,642 @@
+[
+ {
+  "id": "G001",
+  "subject": "Biology",
+  "topic": "Cell Biology",
+  "difficulty": "Easy",
+  "question": "Which organelle is the main site of aerobic respiration (Krebs cycle and electron transport) in a eukaryotic cell?",
+  "options": {
+   "A": "Lysosome",
+   "B": "Golgi apparatus",
+   "C": "Mitochondrion",
+   "D": "Ribosome"
+  },
+  "answer": "C",
+  "explanation": "The Krebs cycle takes place in the mitochondrial matrix and the electron transport chain on the inner mitochondrial membrane.",
+  "concept": "Mitochondria"
+ },
+ {
+  "id": "G002",
+  "subject": "Biology",
+  "topic": "Molecular Biology",
+  "difficulty": "Medium",
+  "question": "Which enzyme unwinds the DNA double helix at the replication fork?",
+  "options": {
+   "A": "Helicase",
+   "B": "Primase",
+   "C": "DNA ligase",
+   "D": "DNA polymerase"
+  },
+  "answer": "A",
+  "explanation": "Helicase breaks the hydrogen bonds between base pairs and separates the two strands.",
+  "concept": "DNA replication"
+ },
+ {
+  "id": "G003",
+  "subject": "Biology",
+  "topic": "Blood and Circulation",
+  "difficulty": "Easy",
+  "question": "Which blood type can be given to patients of any ABO and Rh group in an emergency as red cells?",
+  "options": {
+   "A": "A negative",
+   "B": "B positive",
+   "C": "AB positive",
+   "D": "O negative"
+  },
+  "answer": "D",
+  "explanation": "O negative red cells carry neither A, B nor Rh D antigens, so they are the universal donor type.",
+  "concept": "Blood groups"
+ },
+ {
+  "id": "G004",
+  "subject": "Biology",
+  "topic": "Respiration",
+  "difficulty": "Easy",
+  "question": "In humans, gas exchange between air and blood takes place in the",
+  "options": {
+   "A": "bronchi",
+   "B": "trachea",
+   "C": "bronchioles",
+   "D": "alveoli"
+  },
+  "answer": "D",
+  "explanation": "Alveoli have thin walls and a rich capillary network, which allows diffusion of oxygen and carbon dioxide.",
+  "concept": "Gas exchange"
+ },
+ {
+  "id": "G005",
+  "subject": "Biology",
+  "topic": "Cell Division",
+  "difficulty": "Easy",
+  "question": "How many chromosomes are in a normal human sperm or egg cell?",
+  "options": {
+   "A": "23",
+   "B": "92",
+   "C": "46",
+   "D": "44"
+  },
+  "answer": "A",
+  "explanation": "Gametes are haploid (n = 23) because meiosis halves the diploid number of 46.",
+  "concept": "Meiosis"
+ },
+ {
+  "id": "G006",
+  "subject": "Biology",
+  "topic": "Coordination",
+  "difficulty": "Medium",
+  "question": "What is the main effect of insulin on the liver?",
+  "options": {
+   "A": "It breaks glycogen down to glucose",
+   "B": "It increases bile secretion",
+   "C": "It promotes conversion of glucose to glycogen",
+   "D": "It converts amino acids to glucose"
+  },
+  "answer": "C",
+  "explanation": "Insulin lowers blood glucose by promoting uptake and storage of glucose, including glycogen synthesis in the liver.",
+  "concept": "Insulin"
+ },
+ {
+  "id": "G007",
+  "subject": "Biology",
+  "topic": "Photosynthesis",
+  "difficulty": "Medium",
+  "question": "The light-dependent reactions of photosynthesis take place in the",
+  "options": {
+   "A": "stroma",
+   "B": "mitochondrial matrix",
+   "C": "cytoplasm",
+   "D": "thylakoid membranes"
+  },
+  "answer": "D",
+  "explanation": "Chlorophyll and the electron transport chain are in the thylakoid membranes of the chloroplast; the Calvin cycle is in the stroma.",
+  "concept": "Chloroplast structure"
+ },
+ {
+  "id": "G008",
+  "subject": "Biology",
+  "topic": "Genetics",
+  "difficulty": "Medium",
+  "question": "In a monohybrid cross between two heterozygotes (Tt x Tt) with complete dominance, the phenotypic ratio of the offspring is",
+  "options": {
+   "A": "3 : 1",
+   "B": "1 : 1",
+   "C": "1 : 2 : 1",
+   "D": "9 : 3 : 3 : 1"
+  },
+  "answer": "A",
+  "explanation": "Genotypes appear 1 TT : 2 Tt : 1 tt, which gives 3 dominant to 1 recessive phenotype.",
+  "concept": "Monohybrid cross"
+ },
+ {
+  "id": "G009",
+  "subject": "Biology",
+  "topic": "Excretion",
+  "difficulty": "Easy",
+  "question": "The structural and functional unit of the kidney is the",
+  "options": {
+   "A": "nephron",
+   "B": "neuron",
+   "C": "alveolus",
+   "D": "villus"
+  },
+  "answer": "A",
+  "explanation": "Each kidney contains about a million nephrons which filter blood and form urine.",
+  "concept": "Nephron"
+ },
+ {
+  "id": "G010",
+  "subject": "Biology",
+  "topic": "Nutrition",
+  "difficulty": "Easy",
+  "question": "Deficiency of which vitamin causes night blindness?",
+  "options": {
+   "A": "Vitamin C",
+   "B": "Vitamin K",
+   "C": "Vitamin A",
+   "D": "Vitamin D"
+  },
+  "answer": "C",
+  "explanation": "Vitamin A is needed to make rhodopsin, the pigment of rod cells used in dim light.",
+  "concept": "Vitamins"
+ },
+ {
+  "id": "G011",
+  "subject": "Biology",
+  "topic": "Molecular Biology",
+  "difficulty": "Medium",
+  "question": "Messenger RNA is synthesised from a DNA template during",
+  "options": {
+   "A": "translation",
+   "B": "transcription",
+   "C": "replication",
+   "D": "mitosis"
+  },
+  "answer": "B",
+  "explanation": "Transcription copies a gene into mRNA; translation then uses mRNA to build a protein.",
+  "concept": "Central dogma"
+ },
+ {
+  "id": "G012",
+  "subject": "Biology",
+  "topic": "Coordination",
+  "difficulty": "Medium",
+  "question": "Which part of the human brain regulates body temperature, hunger and thirst?",
+  "options": {
+   "A": "Medulla oblongata",
+   "B": "Cerebellum",
+   "C": "Hypothalamus",
+   "D": "Cerebrum"
+  },
+  "answer": "C",
+  "explanation": "The hypothalamus is the control centre for homeostasis and links the nervous and endocrine systems.",
+  "concept": "Brain regions"
+ },
+ {
+  "id": "G013",
+  "subject": "Chemistry",
+  "topic": "Atomic Structure",
+  "difficulty": "Easy",
+  "question": "What is the atomic number of carbon?",
+  "options": {
+   "A": "8",
+   "B": "4",
+   "C": "12",
+   "D": "6"
+  },
+  "answer": "D",
+  "explanation": "Carbon has 6 protons, so its atomic number is 6.",
+  "concept": "Atomic number"
+ },
+ {
+  "id": "G014",
+  "subject": "Chemistry",
+  "topic": "Acids and Bases",
+  "difficulty": "Medium",
+  "question": "What is the pH of a 0.01 M solution of hydrochloric acid at 25 degrees C?",
+  "options": {
+   "A": "1",
+   "B": "12",
+   "C": "2",
+   "D": "0.01"
+  },
+  "answer": "C",
+  "explanation": "HCl is a strong acid, so [H+] = 0.01 = 10^-2 M and pH = 2.",
+  "concept": "pH"
+ },
+ {
+  "id": "G015",
+  "subject": "Chemistry",
+  "topic": "Chemical Bonding",
+  "difficulty": "Easy",
+  "question": "The bond in sodium chloride is",
+  "options": {
+   "A": "metallic",
+   "B": "covalent",
+   "C": "hydrogen",
+   "D": "ionic"
+  },
+  "answer": "D",
+  "explanation": "Sodium transfers an electron to chlorine, forming Na+ and Cl- ions held by electrostatic attraction.",
+  "concept": "Ionic bond"
+ },
+ {
+  "id": "G016",
+  "subject": "Chemistry",
+  "topic": "Reactions of Metals",
+  "difficulty": "Easy",
+  "question": "Which gas is released when zinc reacts with dilute hydrochloric acid?",
+  "options": {
+   "A": "Oxygen",
+   "B": "Chlorine",
+   "C": "Carbon dioxide",
+   "D": "Hydrogen"
+  },
+  "answer": "D",
+  "explanation": "Zn + 2HCl gives ZnCl2 + H2; the gas gives a squeaky pop with a burning splint.",
+  "concept": "Metal and acid"
+ },
+ {
+  "id": "G017",
+  "subject": "Chemistry",
+  "topic": "Organic Chemistry",
+  "difficulty": "Medium",
+  "question": "What is the general formula of the alkenes?",
+  "options": {
+   "A": "CnH2n+2",
+   "B": "CnH2n",
+   "C": "CnHn",
+   "D": "CnH2n-2"
+  },
+  "answer": "B",
+  "explanation": "Alkenes have one C=C double bond, so they have two fewer hydrogens than the alkane with the same carbons.",
+  "concept": "Homologous series"
+ },
+ {
+  "id": "G018",
+  "subject": "Chemistry",
+  "topic": "Mole Concept",
+  "difficulty": "Easy",
+  "question": "Which value is closest to Avogadro's number?",
+  "options": {
+   "A": "6.022 x 10^23 per mole",
+   "B": "3.0 x 10^8 per mole",
+   "C": "6.022 x 10^-23 per mole",
+   "D": "1.6 x 10^-19 per mole"
+  },
+  "answer": "A",
+  "explanation": "One mole of any substance contains 6.022 x 10^23 particles.",
+  "concept": "Mole"
+ },
+ {
+  "id": "G019",
+  "subject": "Chemistry",
+  "topic": "Periodic Table",
+  "difficulty": "Easy",
+  "question": "Which element has the highest electronegativity?",
+  "options": {
+   "A": "Oxygen",
+   "B": "Nitrogen",
+   "C": "Fluorine",
+   "D": "Chlorine"
+  },
+  "answer": "C",
+  "explanation": "Fluorine is the most electronegative element (4.0 on the Pauling scale).",
+  "concept": "Electronegativity"
+ },
+ {
+  "id": "G020",
+  "subject": "Chemistry",
+  "topic": "Organic Chemistry",
+  "difficulty": "Easy",
+  "question": "What is the IUPAC name of CH3CH2OH?",
+  "options": {
+   "A": "Propanol",
+   "B": "Methanol",
+   "C": "Ethanal",
+   "D": "Ethanol"
+  },
+  "answer": "D",
+  "explanation": "Two carbons and an -OH group give ethanol.",
+  "concept": "Alcohols"
+ },
+ {
+  "id": "G021",
+  "subject": "Chemistry",
+  "topic": "Redox",
+  "difficulty": "Easy",
+  "question": "In terms of electrons, oxidation is",
+  "options": {
+   "A": "gain of neutrons",
+   "B": "loss of electrons",
+   "C": "gain of electrons",
+   "D": "loss of protons"
+  },
+  "answer": "B",
+  "explanation": "OIL RIG: Oxidation Is Loss, Reduction Is Gain of electrons.",
+  "concept": "Oxidation"
+ },
+ {
+  "id": "G022",
+  "subject": "Chemistry",
+  "topic": "Equilibrium",
+  "difficulty": "Hard",
+  "question": "For N2(g) + 3H2(g) <=> 2NH3(g), increasing the pressure at constant temperature shifts the equilibrium",
+  "options": {
+   "A": "not at all",
+   "B": "to the left (towards N2 and H2)",
+   "C": "to the right (towards NH3)",
+   "D": "first right and then left"
+  },
+  "answer": "C",
+  "explanation": "The right side has fewer moles of gas (2 versus 4), and a pressure increase favours the side with fewer moles (Le Chatelier).",
+  "concept": "Le Chatelier's principle"
+ },
+ {
+  "id": "G023",
+  "subject": "Physics",
+  "topic": "Units",
+  "difficulty": "Easy",
+  "question": "What is the SI unit of force?",
+  "options": {
+   "A": "Newton",
+   "B": "Joule",
+   "C": "Pascal",
+   "D": "Watt"
+  },
+  "answer": "A",
+  "explanation": "Force is measured in newtons, where 1 N = 1 kg m/s^2.",
+  "concept": "SI units"
+ },
+ {
+  "id": "G024",
+  "subject": "Physics",
+  "topic": "Gravitation",
+  "difficulty": "Easy",
+  "question": "The acceleration due to gravity near the Earth's surface is approximately",
+  "options": {
+   "A": "9.8 m/s^2",
+   "B": "0.98 m/s^2",
+   "C": "98 m/s^2",
+   "D": "1.6 m/s^2"
+  },
+  "answer": "A",
+  "explanation": "g is about 9.8 m/s^2 (1.6 m/s^2 is the value on the Moon).",
+  "concept": "Gravity"
+ },
+ {
+  "id": "G025",
+  "subject": "Physics",
+  "topic": "Current Electricity",
+  "difficulty": "Easy",
+  "question": "A 12 V battery drives a current of 3 A through a resistor. What is the resistance?",
+  "options": {
+   "A": "9 ohm",
+   "B": "36 ohm",
+   "C": "0.25 ohm",
+   "D": "4 ohm"
+  },
+  "answer": "D",
+  "explanation": "R = V / I = 12 / 3 = 4 ohm.",
+  "concept": "Ohm's law"
+ },
+ {
+  "id": "G026",
+  "subject": "Physics",
+  "topic": "Work and Energy",
+  "difficulty": "Medium",
+  "question": "What is the kinetic energy of a 2 kg mass moving at 3 m/s?",
+  "options": {
+   "A": "3 J",
+   "B": "18 J",
+   "C": "6 J",
+   "D": "9 J"
+  },
+  "answer": "D",
+  "explanation": "KE = 1/2 m v^2 = 0.5 x 2 x 9 = 9 J.",
+  "concept": "Kinetic energy"
+ },
+ {
+  "id": "G027",
+  "subject": "Physics",
+  "topic": "Waves",
+  "difficulty": "Easy",
+  "question": "Which value is closest to the speed of light in vacuum?",
+  "options": {
+   "A": "3 x 10^5 m/s",
+   "B": "3 x 10^10 m/s",
+   "C": "3 x 10^8 m/s",
+   "D": "3 x 10^6 m/s"
+  },
+  "answer": "C",
+  "explanation": "The speed of light is about 3 x 10^8 m/s.",
+  "concept": "Light"
+ },
+ {
+  "id": "G028",
+  "subject": "Physics",
+  "topic": "Geometrical Optics",
+  "difficulty": "Easy",
+  "question": "Which type of mirror is used as a car's rear-view mirror because it gives a wide field of view?",
+  "options": {
+   "A": "Concave mirror",
+   "B": "Cylindrical mirror",
+   "C": "Convex mirror",
+   "D": "Plane mirror"
+  },
+  "answer": "C",
+  "explanation": "A convex mirror always forms an upright, diminished image and covers a wide area.",
+  "concept": "Mirrors"
+ },
+ {
+  "id": "G029",
+  "subject": "Physics",
+  "topic": "Waves",
+  "difficulty": "Medium",
+  "question": "A wave has a period of 0.02 s. What is its frequency?",
+  "options": {
+   "A": "50 Hz",
+   "B": "0.02 Hz",
+   "C": "500 Hz",
+   "D": "5 Hz"
+  },
+  "answer": "A",
+  "explanation": "f = 1 / T = 1 / 0.02 = 50 Hz.",
+  "concept": "Frequency"
+ },
+ {
+  "id": "G030",
+  "subject": "Physics",
+  "topic": "Work and Energy",
+  "difficulty": "Easy",
+  "question": "How much work is done by a 10 N force moving an object 5 m in the direction of the force?",
+  "options": {
+   "A": "5 J",
+   "B": "50 J",
+   "C": "2 J",
+   "D": "15 J"
+  },
+  "answer": "B",
+  "explanation": "W = F x d = 10 x 5 = 50 J.",
+  "concept": "Work"
+ },
+ {
+  "id": "G031",
+  "subject": "Physics",
+  "topic": "Capacitors",
+  "difficulty": "Easy",
+  "question": "What is the SI unit of capacitance?",
+  "options": {
+   "A": "Weber",
+   "B": "Tesla",
+   "C": "Henry",
+   "D": "Farad"
+  },
+  "answer": "D",
+  "explanation": "Capacitance is measured in farads (coulomb per volt).",
+  "concept": "Capacitance"
+ },
+ {
+  "id": "G032",
+  "subject": "Physics",
+  "topic": "Kinematics",
+  "difficulty": "Medium",
+  "question": "An object is dropped from rest from a height of 20 m. Taking g = 10 m/s^2 and ignoring air resistance, how long does it take to reach the ground?",
+  "options": {
+   "A": "1 s",
+   "B": "4 s",
+   "C": "20 s",
+   "D": "2 s"
+  },
+  "answer": "D",
+  "explanation": "h = 1/2 g t^2, so t = sqrt(2 x 20 / 10) = 2 s.",
+  "concept": "Free fall"
+ },
+ {
+  "id": "G033",
+  "subject": "English",
+  "topic": "Vocabulary",
+  "difficulty": "Easy",
+  "question": "Choose the word closest in meaning to 'benevolent'.",
+  "options": {
+   "A": "Careless",
+   "B": "Lazy",
+   "C": "Cruel",
+   "D": "Kind"
+  },
+  "answer": "D",
+  "explanation": "Benevolent means well-meaning and kindly.",
+  "concept": "Synonyms"
+ },
+ {
+  "id": "G034",
+  "subject": "English",
+  "topic": "Vocabulary",
+  "difficulty": "Easy",
+  "question": "Choose the antonym of 'scarce'.",
+  "options": {
+   "A": "Rare",
+   "B": "Abundant",
+   "C": "Little",
+   "D": "Limited"
+  },
+  "answer": "B",
+  "explanation": "Scarce means in short supply; abundant means plentiful.",
+  "concept": "Antonyms"
+ },
+ {
+  "id": "G035",
+  "subject": "English",
+  "topic": "Grammar",
+  "difficulty": "Medium",
+  "question": "Choose the correct word: 'Neither of the students ___ present.'",
+  "options": {
+   "A": "be",
+   "B": "are",
+   "C": "were",
+   "D": "was"
+  },
+  "answer": "D",
+  "explanation": "'Neither' takes a singular verb, so 'was' (or 'is') is correct.",
+  "concept": "Subject-verb agreement"
+ },
+ {
+  "id": "G036",
+  "subject": "English",
+  "topic": "Grammar",
+  "difficulty": "Medium",
+  "question": "Choose the passive voice of 'The chef cooked the meal.'",
+  "options": {
+   "A": "The meal has cooked the chef.",
+   "B": "The meal is cooked by the chef.",
+   "C": "The meal was cooked by the chef.",
+   "D": "The chef was cooked by the meal."
+  },
+  "answer": "C",
+  "explanation": "Simple past active becomes 'was/were + past participle' in the passive.",
+  "concept": "Active and passive voice"
+ },
+ {
+  "id": "G037",
+  "subject": "English",
+  "topic": "Spelling",
+  "difficulty": "Easy",
+  "question": "Which spelling is correct?",
+  "options": {
+   "A": "Acomodate",
+   "B": "Accommodate",
+   "C": "Acommodate",
+   "D": "Accomodate"
+  },
+  "answer": "B",
+  "explanation": "Accommodate has double c and double m.",
+  "concept": "Spelling"
+ },
+ {
+  "id": "G038",
+  "subject": "Logical Reasoning",
+  "topic": "Number Series",
+  "difficulty": "Medium",
+  "question": "What comes next in the series 2, 6, 12, 20, 30, ... ?",
+  "options": {
+   "A": "40",
+   "B": "42",
+   "C": "44",
+   "D": "36"
+  },
+  "answer": "B",
+  "explanation": "The differences are 4, 6, 8, 10, so the next difference is 12 and the next term is 42.",
+  "concept": "Series"
+ },
+ {
+  "id": "G039",
+  "subject": "Logical Reasoning",
+  "topic": "Syllogisms",
+  "difficulty": "Medium",
+  "question": "Statements: All roses are flowers. Some flowers fade quickly. Which conclusion definitely follows?",
+  "options": {
+   "A": "Every rose is a flower.",
+   "B": "All flowers are roses.",
+   "C": "Some roses fade quickly.",
+   "D": "No flower fades quickly."
+  },
+  "answer": "A",
+  "explanation": "Only the first statement guarantees that every rose is a flower; the other conclusions are not supported.",
+  "concept": "Syllogism"
+ },
+ {
+  "id": "G040",
+  "subject": "Logical Reasoning",
+  "topic": "Ordering",
+  "difficulty": "Easy",
+  "question": "A is taller than B and B is taller than C. Who is the shortest?",
+  "options": {
+   "A": "A",
+   "B": "It cannot be determined",
+   "C": "B",
+   "D": "C"
+  },
+  "answer": "D",
+  "explanation": "A > B > C, so C is the shortest.",
+  "concept": "Ranking"
+ }
+]

@@ -82,6 +82,8 @@ class FakeSt(types.ModuleType):
     def time_input(label, value=None, key=None, **k): return OVR.get(key or label, value)
     popover = staticmethod(lambda *a, **k: Ctx())
     @staticmethod
+    def link_button(label, url, **k): OUT.append(f"LINK {label}")
+    @staticmethod
     def file_uploader(*a, **k): return None
     @staticmethod
     def audio_input(*a, **k): return None
@@ -322,6 +324,52 @@ with db.connect() as _con: _con.execute("UPDATE assignments SET allow_late=1 WHE
 OVR["Quiz code"] = dcode; OVR["Open quiz"] = True; run("Published Quizzes", student_id="cs1", student_name="Cs", is_tutor=False); OVR.clear()
 check("allow-late lets the student start (with a warning)", ss["shared_quiz"] is not None and any("late" in o for o in OUT), OUT[:4])
 ss["shared_quiz"] = None
+
+# ---- Month 2: daily challenge, live quiz, reminders, AI quality tab
+import daily as _daily, live as _live
+OVR.clear(); ss["daily_quiz"] = None
+run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False); check("Daily Challenge page runs", any("Daily Challenge" in o for o in OUT), OUT[:3])
+OVR["daily_start"] = True; run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False); OVR.clear()
+dq = ss.get("daily_quiz"); check("daily challenge builds 5 questions offline", dq and len(dq["questions"]) == 5 and dq["time_limit_sec"] == 300, dq and len(dq["questions"]))
+OVR["start_" + dq["uid"]] = True; run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False); OVR.clear()
+dq["answers"] = {i: q["answer"] for i, q in enumerate(dq["questions"])}; dq["answer_ts"] = {i: dq["started_at"] + 1 for i in dq["answers"]}
+OVR["submit_" + dq["uid"]] = True; run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False); OVR.clear()
+run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False)   # the app re-runs once after submit and stores the day's result then
+res_d = _daily.result_for("dc1", _daily.today())
+check("daily result stored with bonus XP", res_d and res_d["correct"] == 5 and res_d["xp"] == _daily.BONUS_XP + _daily.BONUS_PERFECT, res_d)
+run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False); check("page shows done + leaderboard after finishing", any("already done" in o or "challenge is done" in o for o in OUT) and "TABLE" in OUT, OUT[:6])
+ss["daily_quiz"] = None
+OVR["daily_start"] = True; run("Daily Challenge", student_id="dc1", student_name="Dee", is_tutor=False); OVR.clear()
+check("second attempt on the same day is not offered", ss.get("daily_quiz") is None)
+
+# live quiz: tutor creates from the bank, student joins and answers
+for i in range(3): bank.add_question(tid, dict(QS_OPT[0], question=f"Live bank question {i} about the cell?"), "Biology", "Cells")
+OVR.update({"lv_create": True, "lv_subject": "Biology", "lv_n": 3}); ss["live_host_code"] = None
+run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+lcode = ss.get("live_host_code"); check("tutor creates a live quiz", bool(lcode) and len(lcode) == 6, lcode)
+run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); check("host console shows the join code", any(lcode in o for o in OUT), OUT[:5])
+ss["live_code"] = None; OVR["Live quiz code"] = lcode; OVR["Join"] = True
+run("Live Quiz", student_id="lp1", student_name="Pat", is_tutor=False); OVR.clear()
+check("student joins the live quiz", ss.get("live_code") == lcode)
+run("Live Quiz", student_id="lp1", student_name="Pat", is_tutor=False); check("student waits in the lobby", any("Waiting for the tutor" in o for o in OUT), OUT[:5])
+OVR["lv_start"] = True; run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+check("host starts the game", _live.get_state(lcode)["state"] == _live.QUESTION)
+run("Live Quiz", student_id="lp1", student_name="Pat", is_tutor=False); check("student sees the question", any("Question 1 of 3" in o for o in OUT), OUT[:6])
+sid_l = _live.get_state(lcode)["id"]; q0 = _live.get_questions(sid_l)[0]
+shown = _live.display_question(q0, "lp1", sid_l); pressed = next(k for k, v in shown["options"].items() if v == q0["options"][q0["answer"]])
+OVR[f"lvp_{sid_l}_0_{pressed}"] = True; run("Live Quiz", student_id="lp1", student_name="Pat", is_tutor=False); OVR.clear()
+check("correct answer by shuffled letter scores points", (_live.my_answer(sid_l, "lp1", 0) or {}).get("is_correct") == 1, _live.my_answer(sid_l, "lp1", 0))
+run("Live Quiz", student_id="lp1", student_name="Pat", is_tutor=False); check("student sees answer locked", any("locked" in o for o in OUT), OUT[:6])
+_live.end_session(lcode, tid); run("Live Quiz", student_id="lp1", student_name="Pat", is_tutor=False)
+check("finished game shows the result and credits progress", any("over" in o for o in OUT) and len(db.history("lp1")) == 1, OUT[:5])
+ss["live_code"] = None; ss["live_host_code"] = None
+
+# reminders + AI quality
+OVR["rem_preview"] = True; run("Today", student_id="dc1", student_name="Dee", is_tutor=False); OVR.clear()
+check("reminder preview works", any(o.startswith("LINK") for o in OUT) or any("caught up" in o for o in OUT), OUT[-4:])
+run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); check("AI Quality tab renders", any("AI quality" in o for o in OUT), OUT[:3])
+OVR["aiq_import"] = True; run("Tutor Dashboard", is_tutor=True, student_id=tid, student_name="Tutor"); OVR.clear()
+check("starter pack imported into the bank", bank.count_questions(tid, subject="Chemistry") >= 10, bank.count_questions(tid))
 
 # ---- memory reset button
 from memory import LongTermMemory
